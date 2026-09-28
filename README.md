@@ -335,7 +335,7 @@ The reusable workflows call this repository's actions at `@v1` and install the `
 Releases are cut by pushing a `vX.Y.Z` tag on `main`. The [release workflow](.github/workflows/release.yml) then:
 
 1. runs the tests and checks that `setup/dist/index.js` matches a fresh build of the source;
-2. force-moves the major tag (`v1` for `v1.4.2`) to the tagged commit and pushes it;
+2. force-moves the major tag (`v1` for `v1.4.2`) to the tagged commit and pushes it, but only when the tag is the newest stable release of that major, so a patch on an older line (`v1.3.5` after `v1.4.2`) leaves `v1` where it is;
 3. creates a GitHub release for the tag with generated notes.
 
 Tags with a pre-release suffix (`v1.5.0-rc.1`) get a pre-release and leave the major tag where it is. A new major version (`v2.0.0`) starts a new major tag and leaves `v1` on the last `v1` release.
