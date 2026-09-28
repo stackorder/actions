@@ -318,7 +318,7 @@ Runs `stackorder drift --stack <stack> --run-id <run-id> --server <server-url>`.
 
 ## Fork pull requests
 
-A `pull_request` run from a fork gets a read-only `GITHUB_TOKEN` and no `id-token: write`, so it can reach neither the AWS role nor the Stackorder server. `plan.yml` therefore skips `resolve` and `plan` for forks and runs only `fork-notice`, which writes an explanation to the job summary. To get plans, a maintainer can push the branch to the repository itself. Switching the caller to `pull_request_target` behind a label gate also works, but it runs with the base repository's permissions on code from the fork; Stackorder documents it and does not recommend it.
+A `pull_request` run from a fork gets a read-only `GITHUB_TOKEN` and no `id-token: write`, so it can reach neither the AWS role nor the Stackorder server. `plan.yml` therefore skips `resolve` and `plan` for forks and runs only `fork-notice`, which writes an explanation to the job summary. To get plans, a maintainer can push the branch to the repository itself. Switching the caller to `pull_request_target` does not produce fork plans with these workflows: `plan.yml` skips `resolve` and `plan` whenever the head repository is a fork, whatever the event, and the server accepts plan results only from `pull_request` tokens.
 
 ## Versions and pinning
 

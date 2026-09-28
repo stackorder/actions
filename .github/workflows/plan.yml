@@ -175,7 +175,5 @@ jobs:
           `GITHUB_TOKEN` and no `id-token: write` permission, so the job can reach neither the
           AWS role nor the Stackorder server, and nothing was planned.
 
-          A maintainer can push the branch to this repository to get plans, or switch the
-          caller workflow to `pull_request_target` behind a label gate; the Stackorder
-          documentation describes that setup and its risks.
+          A maintainer can push the branch to this repository to get plans.
           EOF
