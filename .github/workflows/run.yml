@@ -76,7 +76,7 @@ jobs:
     runs-on: ${{ (startsWith(inputs.runner, '[') || startsWith(inputs.runner, '{')) && fromJSON(inputs.runner) || inputs.runner }}
     environment: ${{ matrix.environment }}
     concurrency:
-      group: stackorder-${{ matrix.key }}
+      group: stackorder-stack-${{ matrix.key }}
       cancel-in-progress: false
     strategy:
       fail-fast: false

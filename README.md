@@ -168,7 +168,7 @@ Called from `stackorder-plan.yml` on `pull_request`. Three jobs:
 Called from `stackorder-run.yml`, which the server dispatches once per wave and GitHub environment. One job, `run`, fans out over the `stacks` input with `fail-fast: false` and `max-parallel`:
 
 - `environment: ${{ matrix.environment }}` puts each stack under the GitHub environment the server assigned it (`default` when no prefix matches, never empty), so the environment's required reviewers, deployment protection rules and the AWS trust policy's `environment` condition gate the job.
-- `concurrency: stackorder-<stack key>` without `cancel-in-progress` keeps two jobs from running on the same stack at once. GitHub keeps at most one pending job per concurrency group, so a third job queued for the same stack replaces the pending one.
+- `concurrency: stackorder-stack-<stack key>` without `cancel-in-progress` keeps two jobs from running on the same stack at once. The `stack-` prefix keeps the group apart from the caller's `stackorder-plan-<pull request>` group, since concurrency groups are shared by every workflow and job in the repository. GitHub keeps at most one pending job per concurrency group, so a third job queued for the same stack replaces the pending one.
 - The job checks out `sha`, installs the stack's tool (the entry's `tool` and `tool_version` when set, otherwise the `tool` and `tool-version` inputs), installs `stackorder`, selects and assumes the AWS role, restores the plugin cache, then runs exactly one of the [`plan`](#plan), [`apply`](#apply) or [`drift`](#drift) actions according to `mode`. Any other `mode` fails the job before checkout.
 
 | Input | Type | Default | Description |
