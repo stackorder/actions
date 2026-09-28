@@ -1,0 +1,173 @@
+name: stackorder run
+
+on:
+  workflow_call:
+    inputs:
+      run-id:
+        description: Stackorder run id from the dispatch.
+        type: string
+        required: true
+      mode:
+        description: plan, apply or drift.
+        type: string
+        required: true
+      wave:
+        description: Wave index of this dispatch, shown in job names.
+        type: string
+        default: ""
+      sha:
+        description: Commit to check out. Empty falls back to each stack entry's sha, then to the dispatched ref.
+        type: string
+        default: ""
+      stacks:
+        description: JSON array of stack entries (v1.MatrixEntry), each carrying its GitHub environment.
+        type: string
+        required: true
+      server-url:
+        description: Base URL of the Stackorder server.
+        type: string
+        required: true
+      aws-role-arn-map:
+        description: JSON object from stack path prefix to IAM role ARN; the longest matching prefix wins.
+        type: string
+        default: ""
+      aws-role-arn:
+        description: IAM role to assume for every stack that matches no prefix in aws-role-arn-map. Empty with no match skips AWS credentials.
+        type: string
+        default: ""
+      aws-region:
+        description: AWS region for the credentials.
+        type: string
+        default: us-east-1
+      tool:
+        description: terraform or tofu, used when a stack entry does not name a tool.
+        type: string
+        default: terraform
+      tool-version:
+        description: Tool version to install when a stack entry does not pin one.
+        type: string
+        default: latest
+      stackorder-version:
+        description: stackorder CLI release to install, as 1.2.3, v1.2.3 or latest.
+        type: string
+        default: latest
+      runner:
+        description: Runner label, or a JSON array or object for runs-on.
+        type: string
+        default: ubuntu-latest
+      max-parallel:
+        description: Maximum number of stacks run at the same time.
+        type: number
+        default: 6
+      working-directory:
+        description: Directory to run stackorder in, relative to the repository root.
+        type: string
+        default: .
+
+permissions: {}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  run:
+    name: ${{ inputs.wave != '' && format('{0} wave {1} {2}', inputs.mode, inputs.wave, matrix.key) || format('{0} {1}', inputs.mode, matrix.key) }}
+    runs-on: ${{ (startsWith(inputs.runner, '[') || startsWith(inputs.runner, '{')) && fromJSON(inputs.runner) || inputs.runner }}
+    environment: ${{ matrix.environment }}
+    concurrency:
+      group: stackorder-${{ matrix.key }}
+      cancel-in-progress: false
+    strategy:
+      fail-fast: false
+      max-parallel: ${{ inputs.max-parallel }}
+      matrix:
+        include: ${{ fromJSON(inputs.stacks) }}
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      checks: write
+    env:
+      STACKORDER_RUN_ID: ${{ inputs.run-id }}
+      STACKORDER_TOOL: ${{ matrix.tool || inputs.tool }}
+    steps:
+      - name: Check mode
+        if: inputs.mode != 'plan' && inputs.mode != 'apply' && inputs.mode != 'drift'
+        env:
+          MODE: ${{ inputs.mode }}
+        run: |
+          echo "::error::Unknown mode '$MODE': expected plan, apply or drift"
+          exit 1
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.sha || matrix.sha }}
+      - if: env.STACKORDER_TOOL == 'terraform'
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ matrix.tool_version || inputs.tool-version }}
+          terraform_wrapper: false
+      - if: env.STACKORDER_TOOL != 'terraform'
+        uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: ${{ matrix.tool_version || inputs.tool-version }}
+          tofu_wrapper: false
+      - uses: stackorder/actions/setup@v1
+        with:
+          version: ${{ inputs.stackorder-version }}
+      - name: Select AWS role
+        id: role
+        env:
+          ROLE_MAP: ${{ inputs.aws-role-arn-map }}
+          DEFAULT_ROLE: ${{ inputs.aws-role-arn }}
+          STACK_PATH: ${{ matrix.stack }}
+        run: |
+          role="$DEFAULT_ROLE"
+          if [ -n "$ROLE_MAP" ]; then
+            match=$(jq -r --arg stack "$STACK_PATH" \
+              '[to_entries[] | select(.key as $prefix | $stack | startswith($prefix))] | max_by(.key | length) | .value // empty' \
+              <<<"$ROLE_MAP")
+            role="${match:-$role}"
+          fi
+          if [ -z "$role" ]; then
+            echo "::notice::No AWS role for $STACK_PATH in aws-role-arn or aws-role-arn-map; skipping AWS credentials"
+          fi
+          echo "arn=$role" >> "$GITHUB_OUTPUT"
+      - if: steps.role.outputs.arn != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ steps.role.outputs.arn }}
+          aws-region: ${{ inputs.aws-region }}
+      - name: Prepare plugin cache
+        run: |
+          mkdir -p "$RUNNER_TEMP/terraform-plugin-cache"
+          echo "TF_PLUGIN_CACHE_DIR=$RUNNER_TEMP/terraform-plugin-cache" >> "$GITHUB_ENV"
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/terraform-plugin-cache
+          key: stackorder-plugins-${{ runner.os }}-${{ runner.arch }}-${{ env.STACKORDER_TOOL }}-${{ hashFiles(format('{0}/.terraform.lock.hcl', matrix.stack)) }}
+          restore-keys: |
+            stackorder-plugins-${{ runner.os }}-${{ runner.arch }}-${{ env.STACKORDER_TOOL }}-
+      - if: inputs.mode == 'plan'
+        uses: stackorder/actions/plan@v1
+        with:
+          stack: ${{ matrix.key }}
+          run-id: ${{ inputs.run-id }}
+          server-url: ${{ inputs.server-url }}
+          working-directory: ${{ inputs.working-directory }}
+      - if: inputs.mode == 'apply'
+        uses: stackorder/actions/apply@v1
+        with:
+          stack: ${{ matrix.key }}
+          run-id: ${{ inputs.run-id }}
+          server-url: ${{ inputs.server-url }}
+          plan-run-id: ${{ matrix.plan_run_id }}
+          artifact: ${{ matrix.artifact }}
+          working-directory: ${{ inputs.working-directory }}
+      - if: inputs.mode == 'drift'
+        uses: stackorder/actions/drift@v1
+        with:
+          stack: ${{ matrix.key }}
+          run-id: ${{ inputs.run-id }}
+          server-url: ${{ inputs.server-url }}
+          working-directory: ${{ inputs.working-directory }}
