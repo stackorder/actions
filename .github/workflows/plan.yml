@@ -72,11 +72,13 @@ jobs:
       count: ${{ steps.resolve.outputs.count }}
       run-id: ${{ steps.resolve.outputs.run-id }}
       unconfirmed: ${{ steps.resolve.outputs.unconfirmed }}
+      stackorder-version: ${{ steps.setup.outputs.version }}
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: stackorder/actions/setup@v1
+      - id: setup
+        uses: stackorder/actions/setup@v1
         with:
           version: ${{ inputs.stackorder-version }}
       - id: resolve
@@ -120,7 +122,7 @@ jobs:
           tofu_wrapper: false
       - uses: stackorder/actions/setup@v1
         with:
-          version: ${{ inputs.stackorder-version }}
+          version: ${{ needs.resolve.outputs.stackorder-version }}
       - name: Select AWS role
         id: role
         env:
