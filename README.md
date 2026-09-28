@@ -209,7 +209,7 @@ A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
 
 ### Shared behaviour
 
-- **AWS role selection.** A small step picks the role for `matrix.stack`: the value of the longest key in `aws-role-arn-map` that the stack path starts with, otherwise `aws-role-arn`. When neither yields a role the job logs a notice and skips `configure-aws-credentials`, which suits self-hosted runners with an instance role.
+- **AWS role selection.** A small step picks the role for `matrix.stack`: the value of the longest key in `aws-role-arn-map` that the stack path starts with, otherwise `aws-role-arn`. When neither yields a role the job logs a notice and skips `configure-aws-credentials`, which suits self-hosted runners with an instance role. Reading `aws-role-arn-map` needs `jq` on the runner; GitHub-hosted runners have it, self-hosted runners may need it installed.
 - **Tool selection.** The job sets `STACKORDER_TOOL` to the tool it installed, so the CLI always calls the binary that is on `PATH`.
 - **Plugin cache.** `TF_PLUGIN_CACHE_DIR` points at `$RUNNER_TEMP/terraform-plugin-cache`, cached with `actions/cache@v4` under a key built from the runner OS and architecture, the tool and the hash of the stack's `.terraform.lock.hcl`.
 - **Hooks.** `.stackorder/hooks/pre-plan.sh`, `post-plan.sh`, `pre-apply.sh` and `post-apply.sh` are run by the CLI itself, with `STACKORDER_STACK`, `STACKORDER_RUN_ID`, `STACKORDER_PLAN_JSON` and `STACKORDER_PLAN_FILE` set, so they behave the same in CI and on a laptop and need no workflow step.
