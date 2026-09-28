@@ -147,3 +147,43 @@ jobs:
           grep -qxF "plan --stack stacks/app --run-id $run_id --server $SERVER_URL" "$calls"
           grep -qxF "apply --stack stacks/app --run-id $run_id --server $SERVER_URL --plan-file $plans/$ARTIFACT.tfplan" "$calls"
           grep -qxF "drift --stack stacks/app --run-id $run_id --server $SERVER_URL" "$calls"
+
+  drift-exit-codes:
+    name: drift maps stackorder exit code ${{ matrix.code }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { code: 0, outcome: success, drifted: "false" }
+          - { code: 1, outcome: failure, drifted: "false" }
+          - { code: 2, outcome: success, drifted: "true" }
+          - { code: 3, outcome: failure, drifted: "false" }
+    env:
+      STUB_DRIFT_EXIT: ${{ matrix.code }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Put the stub CLI on PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cp test/stackorder-stub.sh "$RUNNER_TEMP/bin/stackorder"
+          chmod +x "$RUNNER_TEMP/bin/stackorder"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - id: drift
+        uses: ./drift
+        continue-on-error: true
+        with:
+          stack: stacks/app
+          run-id: 00000000-0000-4000-8000-000000000001
+          server-url: https://stackorder.invalid
+      - name: Check the step outcome and outputs
+        env:
+          OUTCOME: ${{ steps.drift.outcome }}
+          EXPECTED_OUTCOME: ${{ matrix.outcome }}
+          EXIT_CODE: ${{ steps.drift.outputs.exit-code }}
+          DRIFTED: ${{ steps.drift.outputs.drifted }}
+          EXPECTED_DRIFTED: ${{ matrix.drifted }}
+        run: |
+          test "$OUTCOME" = "$EXPECTED_OUTCOME"
+          test "$EXIT_CODE" = "$STUB_DRIFT_EXIT"
+          test "$DRIFTED" = "$EXPECTED_DRIFTED"

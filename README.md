@@ -353,7 +353,7 @@ npm run build       # bundle setup/dist/index.js
 npm run check-dist  # build, then fail if setup/dist differs from the commit
 ```
 
-Rebuild and commit `setup/dist` with every change to `setup/src` or the dependencies. CI runs the checks above, `actionlint` over the workflows (including copies of the reusable workflows pointed at the local actions, so their inputs are checked against the metadata in this repository), a smoke test that `./setup` fails clearly for a release that does not exist, and a run of the composite actions against a stub CLI in [`test/stackorder-stub.sh`](test/stackorder-stub.sh).
+Rebuild and commit `setup/dist` with every change to `setup/src` or the dependencies. CI runs the checks above, `actionlint` over the workflows (including copies of the reusable workflows pointed at the local actions, so their inputs are checked against the metadata in this repository), a smoke test that `./setup` fails clearly for a release that does not exist, a run of the composite actions against a stub CLI in [`test/stackorder-stub.sh`](test/stackorder-stub.sh), and a check that `drift` passes on exit codes 0 and 2 and fails on 1 and 3.
 
 ## License
 

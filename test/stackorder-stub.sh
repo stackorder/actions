@@ -49,11 +49,14 @@ case "$command" in
     echo 'summary={"adds":1,"changes":0,"destroys":0,"replaces":0}' >> "$GITHUB_OUTPUT"
     ;;
   drift)
+    code=${STUB_DRIFT_EXIT:-2}
+    drifted=false
+    [ "$code" -ne 2 ] || drifted=true
     {
-      echo "drifted=true"
+      echo "drifted=$drifted"
       echo 'summary={"adds":0,"changes":1,"destroys":0,"replaces":0}'
     } >> "$GITHUB_OUTPUT"
-    exit 2
+    exit "$code"
     ;;
   *)
     echo "unexpected command: $command" >&2
