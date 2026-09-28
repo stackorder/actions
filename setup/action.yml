@@ -15,7 +15,7 @@ inputs:
     required: false
     default: ${{ github.server_url == 'https://github.com' && github.token || '' }}
   checksum:
-    description: Verify the archive against the release's stackorder_<version>_checksums.txt. Only false disables it.
+    description: Verify the archive against the release's stackorder_<version>_checksums.txt; true or false, and any other value fails the step.
     required: false
     default: "true"
 

@@ -13,4 +13,4 @@ All notable changes to this repository are documented here. The format follows [
 - `drift` composite action: runs `stackorder drift`, treating exit code 2 as drift found rather than a failure.
 - Reusable `plan.yml` workflow for pull requests: resolve, one plan job per affected stack, and a job summary instead of plans for fork pull requests.
 - Reusable `run.yml` workflow for server dispatches: plan, apply or drift per stack under the stack's GitHub environment, serialized per stack.
-- CI with lint, type checks, tests, a `setup/dist` freshness check, actionlint, a `setup` failure smoke test and a composite action test against a stub CLI; a release workflow that moves the major tag and publishes release notes.
+- CI with lint, type checks, tests, a `setup/dist` freshness check, actionlint, a `setup` failure smoke test, a composite action test against a stub CLI and a `drift` exit code check; a release workflow that publishes release notes and moves the major tag when the release is the newest of its major.
