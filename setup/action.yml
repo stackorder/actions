@@ -1,0 +1,30 @@
+name: Set up stackorder
+description: Download the stackorder CLI release for the runner, verify its SHA-256 checksum, cache it and add it to PATH.
+author: Stackorder
+branding:
+  icon: layers
+  color: purple
+
+inputs:
+  version:
+    description: stackorder release to install, as 1.2.3 or v1.2.3, or latest for the newest published release.
+    required: false
+    default: latest
+  token:
+    description: Token sent to the GitHub API when resolving latest. Leave the default unless on GitHub Enterprise Server, where it must be a github.com token.
+    required: false
+    default: ${{ github.token }}
+  checksum:
+    description: Verify the archive against the release's stackorder_<version>_checksums.txt. Only false disables it.
+    required: false
+    default: "true"
+
+outputs:
+  version:
+    description: Installed version, without the leading v.
+  path:
+    description: Absolute path to the installed stackorder binary.
+
+runs:
+  using: node24
+  main: dist/index.js
