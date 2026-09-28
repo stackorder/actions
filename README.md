@@ -232,7 +232,7 @@ Maps the runner to `linux`, `darwin` or `windows` and `amd64` or `arm64`, downlo
 | Input | Default | Description |
 | --- | --- | --- |
 | `version` | `latest` | Release to install, as `1.2.3` or `v1.2.3`; `latest` resolves the newest release through `GET https://api.github.com/repos/stackorder/stackorder/releases/latest` |
-| `token` | `${{ github.token }}` | Token sent to the GitHub API when resolving `latest`. On GitHub Enterprise Server pass a github.com token or pin `version` |
+| `token` | `${{ github.token }}` on github.com, empty elsewhere | github.com token sent to the GitHub API when resolving `latest`. A GitHub Enterprise Server token is never sent to github.com; there, `latest` is resolved anonymously unless you pass a github.com token, or pin `version` |
 | `checksum` | `true` | Verify the archive against the release checksums file; only `false` disables it |
 
 | Output | Description |

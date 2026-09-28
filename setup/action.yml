@@ -11,9 +11,9 @@ inputs:
     required: false
     default: latest
   token:
-    description: Token sent to the GitHub API when resolving latest. Leave the default unless on GitHub Enterprise Server, where it must be a github.com token.
+    description: github.com token sent to the GitHub API when resolving latest. The default is github.token on github.com and empty elsewhere, so a GitHub Enterprise Server token never leaves its server; pass a github.com token there to avoid anonymous rate limits.
     required: false
-    default: ${{ github.token }}
+    default: ${{ github.server_url == 'https://github.com' && github.token || '' }}
   checksum:
     description: Verify the archive against the release's stackorder_<version>_checksums.txt. Only false disables it.
     required: false
