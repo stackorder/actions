@@ -1,0 +1,149 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: lint, test and check dist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run check-dist
+      - run: node --check setup/dist/index.js
+
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Point copies of the reusable workflows at the local actions
+        run: |
+          for workflow in plan run; do
+            sed -E 's#stackorder/actions/(setup|resolve|plan|apply|drift)@v1#./\1#' \
+              ".github/workflows/$workflow.yml" > ".github/workflows/local-$workflow.yml"
+          done
+      - uses: docker://rhysd/actionlint:latest
+        with:
+          args: -color
+
+  setup-smoke:
+    name: setup fails clearly for a missing release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: missing
+        uses: ./setup
+        continue-on-error: true
+        with:
+          version: 0.0.0-none
+      - name: Check the failure and its message
+        env:
+          OUTCOME: ${{ steps.missing.outcome }}
+          INSTALLED: ${{ steps.missing.outputs.version }}
+          INPUT_VERSION: 0.0.0-none
+          INPUT_TOKEN: ${{ github.token }}
+          INPUT_CHECKSUM: "true"
+          EXPECTED: "::error::Could not download stackorder 0.0.0-none for linux/amd64 from https://github.com/stackorder/stackorder/releases/download/v0.0.0-none/stackorder_0.0.0-none_linux_amd64.tar.gz: HTTP 404"
+        run: |
+          if [ "$OUTCOME" != failure ] || [ -n "$INSTALLED" ]; then
+            echo "::error::setup reported outcome '$OUTCOME' and version '$INSTALLED' for a release that does not exist"
+            exit 1
+          fi
+          code=0
+          output=$(GITHUB_OUTPUT=/dev/null node setup/dist/index.js) || code=$?
+          if [ "$code" -ne 1 ] || ! grep -qF "$EXPECTED" <<<"$output"; then
+            echo "::error::setup exited $code without the expected error message"
+            while IFS= read -r line; do echo "| $line"; done <<<"$output"
+            exit 1
+          fi
+
+  composite:
+    name: composite actions against a stub CLI
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    env:
+      SERVER_URL: https://stackorder.invalid
+    steps:
+      - uses: actions/checkout@v5
+      - name: Put the stub CLI on PATH
+        run: |
+          mkdir -p "$RUNNER_TEMP/bin"
+          cp test/stackorder-stub.sh "$RUNNER_TEMP/bin/stackorder"
+          chmod +x "$RUNNER_TEMP/bin/stackorder"
+          echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
+      - id: resolve
+        uses: ./resolve
+        with:
+          server-url: ${{ env.SERVER_URL }}
+          base-ref: main
+      - id: plan
+        uses: ./plan
+        with:
+          stack: ${{ fromJSON(steps.resolve.outputs.matrix).include[0].key }}
+          run-id: ${{ steps.resolve.outputs.run-id }}
+          server-url: ${{ env.SERVER_URL }}
+          retention-days: "1"
+      - name: Remove the local plan so apply must download it
+        run: rm -rf .stackorder/plans
+      - id: apply
+        uses: ./apply
+        with:
+          stack: stacks/app
+          run-id: ${{ steps.resolve.outputs.run-id }}
+          server-url: ${{ env.SERVER_URL }}
+          plan-run-id: ${{ github.run_id }}
+          artifact: ${{ steps.plan.outputs.artifact }}
+      - id: drift
+        uses: ./drift
+        with:
+          stack: stacks/app
+          run-id: ${{ steps.resolve.outputs.run-id }}
+          server-url: ${{ env.SERVER_URL }}
+      - name: Check arguments and outputs
+        env:
+          COUNT: ${{ steps.resolve.outputs.count }}
+          UNCONFIRMED: ${{ steps.resolve.outputs.unconfirmed }}
+          HAS_CHANGES: ${{ steps.plan.outputs.has-changes }}
+          ARTIFACT: ${{ steps.plan.outputs.artifact }}
+          APPLY_SUMMARY: ${{ steps.apply.outputs.summary }}
+          DRIFTED: ${{ steps.drift.outputs.drifted }}
+          DRIFT_EXIT: ${{ steps.drift.outputs.exit-code }}
+        run: |
+          calls="$RUNNER_TEMP/stackorder-calls.log"
+          run_id=00000000-0000-4000-8000-000000000001
+          plans="$GITHUB_WORKSPACE/.stackorder/plans"
+          cat "$calls"
+          test "$COUNT" = 1
+          test "$UNCONFIRMED" = false
+          test "$HAS_CHANGES" = true
+          test "$ARTIFACT" = "stackorder-plan-stacks-app-$GITHUB_SHA"
+          test "$(jq -r .adds <<<"$APPLY_SUMMARY")" = 1
+          test "$DRIFTED" = true
+          test "$DRIFT_EXIT" = 2
+          grep -qxF "resolve --server $SERVER_URL --base main" "$calls"
+          grep -qxF "plan --stack stacks/app --run-id $run_id --server $SERVER_URL" "$calls"
+          grep -qxF "apply --stack stacks/app --run-id $run_id --server $SERVER_URL --plan-file $plans/$ARTIFACT.tfplan" "$calls"
+          grep -qxF "drift --stack stacks/app --run-id $run_id --server $SERVER_URL" "$calls"
