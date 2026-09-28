@@ -43,7 +43,7 @@ jobs:
             sed -E 's#stackorder/actions/(setup|resolve|plan|apply|drift)@v1#./\1#' \
               ".github/workflows/$workflow.yml" > ".github/workflows/local-$workflow.yml"
           done
-      - uses: docker://rhysd/actionlint:latest
+      - uses: docker://rhysd/actionlint:1.7.12
         with:
           args: -color
 
