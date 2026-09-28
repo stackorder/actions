@@ -1,0 +1,35 @@
+name: Stackorder plan
+description: Plan one stack with stackorder and upload the binary plan file as a workflow artifact.
+inputs:
+  stack: { description: "Stack key to plan, as path or path:workspace.", required: true }
+  run-id: { description: "Stackorder run id from the resolve step or the dispatch input.", required: true }
+  server-url: { description: "Base URL of the Stackorder server.", required: true }
+  working-directory: { description: "Directory to run stackorder in.", default: "." }
+  upload-artifact: { description: "Upload the plan file as the artifact named by the artifact output; only 'true' uploads.", default: "true" }
+  retention-days: { description: "Days to keep the plan artifact.", default: "5" }
+outputs:
+  has-changes: { description: "true when the plan changes resources or outputs.", value: "${{ steps.plan.outputs.has-changes }}" }
+  artifact: { description: "Name of the plan artifact.", value: "${{ steps.plan.outputs.artifact }}" }
+  plan-file: { description: "Path of the binary plan file.", value: "${{ steps.plan.outputs.plan-file }}" }
+  summary: { description: "JSON plan summary.", value: "${{ steps.plan.outputs.summary }}" }
+  unconfirmed: { description: "true when the result could not be confirmed by the server.", value: "${{ steps.plan.outputs.unconfirmed }}" }
+runs:
+  using: composite
+  steps:
+    - id: plan
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STACK: ${{ inputs.stack }}
+        RUN_ID: ${{ inputs.run-id }}
+        SERVER_URL: ${{ inputs.server-url }}
+        STACKORDER_PLAN_DIR: ${{ github.workspace }}/.stackorder/plans
+      run: stackorder plan --stack "$STACK" --run-id "$RUN_ID" --server "$SERVER_URL"
+    - if: inputs.upload-artifact == 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.plan.outputs.artifact }}
+        path: ${{ steps.plan.outputs.plan-file }}
+        if-no-files-found: error
+        retention-days: ${{ inputs.retention-days }}
+        include-hidden-files: true

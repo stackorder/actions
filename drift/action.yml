@@ -1,0 +1,26 @@
+name: Stackorder drift
+description: Check one stack for drift with stackorder. Drift found is a result in the outputs, not a failed step.
+inputs:
+  stack: { description: "Stack key to check, as path or path:workspace.", required: true }
+  run-id: { description: "Stackorder run id from the dispatch input.", required: true }
+  server-url: { description: "Base URL of the Stackorder server.", required: true }
+  working-directory: { description: "Directory to run stackorder in.", default: "." }
+outputs:
+  drifted: { description: "true when the stack's real infrastructure differs from its configuration.", value: "${{ steps.drift.outputs.drifted }}" }
+  summary: { description: "JSON summary of the drift.", value: "${{ steps.drift.outputs.summary }}" }
+  exit-code: { description: "Exit code of stackorder drift, 0 for no drift and 2 for drift found.", value: "${{ steps.drift.outputs.exit-code }}" }
+runs:
+  using: composite
+  steps:
+    - id: drift
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STACK: ${{ inputs.stack }}
+        RUN_ID: ${{ inputs.run-id }}
+        SERVER_URL: ${{ inputs.server-url }}
+      run: |
+        code=0
+        stackorder drift --stack "$STACK" --run-id "$RUN_ID" --server "$SERVER_URL" || code=$?
+        echo "exit-code=$code" >> "$GITHUB_OUTPUT"
+        [ "$code" -eq 0 ] || [ "$code" -eq 2 ] || exit "$code"

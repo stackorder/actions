@@ -1,0 +1,31 @@
+name: Stackorder apply
+description: Download a stack's plan artifact from the run that planned it, then apply it with stackorder.
+inputs:
+  stack: { description: "Stack key to apply, as path or path:workspace.", required: true }
+  run-id: { description: "Stackorder run id from the dispatch input.", required: true }
+  server-url: { description: "Base URL of the Stackorder server.", required: true }
+  plan-run-id: { description: "Actions workflow run id that uploaded the plan artifact.", required: true }
+  artifact: { description: "Name of the plan artifact; the plan file inside it is <artifact>.tfplan.", required: true }
+  working-directory: { description: "Directory to run stackorder in.", default: "." }
+  token: { description: "Token used to download the artifact from the plan run; needs actions read.", default: "${{ github.token }}" }
+outputs:
+  summary: { description: "JSON summary of the applied changes.", value: "${{ steps.apply.outputs.summary }}" }
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      continue-on-error: true
+      with:
+        name: ${{ inputs.artifact }}
+        run-id: ${{ inputs.plan-run-id }}
+        github-token: ${{ inputs.token }}
+        path: ${{ github.workspace }}/.stackorder/plans
+    - id: apply
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        STACK: ${{ inputs.stack }}
+        RUN_ID: ${{ inputs.run-id }}
+        SERVER_URL: ${{ inputs.server-url }}
+        PLAN_FILE: ${{ github.workspace }}/.stackorder/plans/${{ inputs.artifact }}.tfplan
+      run: stackorder apply --stack "$STACK" --run-id "$RUN_ID" --server "$SERVER_URL" --plan-file "$PLAN_FILE"

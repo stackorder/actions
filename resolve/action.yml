@@ -1,0 +1,25 @@
+name: Stackorder resolve
+description: Scan the repository, post its dependency graph to the Stackorder server and expose the plan matrix.
+inputs:
+  base-ref: { description: "Git ref to diff against. Empty lets the CLI use the pull request base.", default: "" }
+  stacks: { description: "Comma separated stack keys to restrict the run to. Empty resolves every affected stack.", default: "" }
+  server-url: { description: "Base URL of the Stackorder server.", required: true }
+  working-directory: { description: "Directory to run stackorder in.", default: "." }
+outputs:
+  matrix: { description: "JSON object with an include list of stack entries, for strategy.matrix.", value: "${{ steps.resolve.outputs.matrix }}" }
+  waves: { description: "JSON array of stack keys per wave.", value: "${{ steps.resolve.outputs.waves }}" }
+  affected: { description: "JSON array of affected stacks and why each is affected.", value: "${{ steps.resolve.outputs.affected }}" }
+  count: { description: "Number of affected stacks.", value: "${{ steps.resolve.outputs.count }}" }
+  run-id: { description: "Stackorder run id.", value: "${{ steps.resolve.outputs.run-id }}" }
+  unconfirmed: { description: "true when the server was unreachable and the CLI resolved locally.", value: "${{ steps.resolve.outputs.unconfirmed }}" }
+runs:
+  using: composite
+  steps:
+    - id: resolve
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        SERVER_URL: ${{ inputs.server-url }}
+        BASE_REF: ${{ inputs.base-ref }}
+        STACKS: ${{ inputs.stacks }}
+      run: stackorder resolve --server "$SERVER_URL" ${BASE_REF:+--base "$BASE_REF"} ${STACKS:+--stacks "$STACKS"}
