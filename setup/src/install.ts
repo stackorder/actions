@@ -1,5 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as core from '@actions/core';
 import * as tc from '@actions/tool-cache';
@@ -44,8 +46,9 @@ export async function install(version: string, target: Target, verify: boolean):
 async function download(version: string, target: Target, file: string): Promise<string> {
   const url = releaseAssetUrl(version, file);
   core.info(`Downloading ${url}`);
+  const dest = join(process.env['RUNNER_TEMP'] || tmpdir(), randomUUID(), file);
   try {
-    return await tc.downloadTool(url);
+    return await tc.downloadTool(url, dest);
   } catch (error) {
     const reason =
       error instanceof tc.HTTPError && error.httpStatusCode === 404

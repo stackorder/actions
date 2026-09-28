@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import * as core from '@actions/core';
 import * as tc from '@actions/tool-cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -75,6 +75,10 @@ function downloadedUrls(): string[] {
   return vi.mocked(tc.downloadTool).mock.calls.map(([url]) => url);
 }
 
+function downloadedPaths(): string[] {
+  return vi.mocked(tc.downloadTool).mock.calls.map(([, dest]) => dest ?? '');
+}
+
 beforeEach(async () => {
   dir = await mkdtemp(join(tmpdir(), 'stackorder-setup-'));
   http.get.mockReset();
@@ -83,16 +87,20 @@ beforeEach(async () => {
   inputs.set('version', '1.2.3');
   inputs.set('token', 'ghs_token');
   inputs.set('checksum', 'true');
+  vi.stubEnv('RUNNER_TEMP', dir);
 
   vi.mocked(tc.find).mockReturnValue('');
-  vi.mocked(tc.downloadTool).mockImplementation(async (url: string) => {
+  vi.mocked(tc.downloadTool).mockImplementation(async (url: string, dest?: string) => {
     const body = assets.get(url);
     if (body === undefined) {
       throw new tc.HTTPError(404);
     }
-    const path = join(dir, basename(url));
-    await writeFile(path, body);
-    return path;
+    if (dest === undefined) {
+      throw new Error(`downloadTool called without a destination for ${url}`);
+    }
+    await mkdir(dirname(dest), { recursive: true });
+    await writeFile(dest, body);
+    return dest;
   });
   vi.mocked(tc.extractTar).mockImplementation(() => extractedDir('stackorder'));
   vi.mocked(tc.extractZip).mockImplementation(() => extractedDir('stackorder.exe'));
@@ -103,6 +111,7 @@ beforeEach(async () => {
 
 afterEach(async () => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -119,7 +128,7 @@ describe('run', () => {
       `${releaseBase}/v1.2.3/stackorder_1.2.3_linux_amd64.tar.gz`,
       `${releaseBase}/v1.2.3/stackorder_1.2.3_checksums.txt`,
     ]);
-    expect(tc.extractTar).toHaveBeenCalledWith(join(dir, 'stackorder_1.2.3_linux_amd64.tar.gz'));
+    expect(tc.extractTar).toHaveBeenCalledWith(downloadedPaths()[0]);
     expect(tc.cacheDir).toHaveBeenCalledWith(join(dir, 'extracted'), 'stackorder', '1.2.3', 'amd64');
     expect(core.addPath).toHaveBeenCalledWith(`${toolCache}/1.2.3/amd64`);
     expect(core.setOutput).toHaveBeenCalledWith('version', '1.2.3');
@@ -184,13 +193,29 @@ describe('run', () => {
     expect(core.setOutput).toHaveBeenCalledWith('path', `${toolCache}/1.2.3/arm64/stackorder`);
   });
 
+  it('downloads each asset under its own name in a fresh directory of RUNNER_TEMP', async () => {
+    publish('1.2.3', 'stackorder_1.2.3_linux_amd64.tar.gz');
+
+    await run('linux', 'x64');
+
+    const paths = downloadedPaths();
+    expect(paths.map((path) => basename(path))).toEqual([
+      'stackorder_1.2.3_linux_amd64.tar.gz',
+      'stackorder_1.2.3_checksums.txt',
+    ]);
+    expect(paths.map((path) => dirname(dirname(path)))).toEqual([dir, dir]);
+    expect(new Set(paths.map((path) => dirname(path))).size).toBe(2);
+  });
+
   it('downloads and extracts the zip archive on windows', async () => {
     publish('1.2.3', 'stackorder_1.2.3_windows_amd64.zip');
 
     await run('win32', 'x64');
 
     expect(core.setFailed).not.toHaveBeenCalled();
-    expect(tc.extractZip).toHaveBeenCalledWith(join(dir, 'stackorder_1.2.3_windows_amd64.zip'));
+    const [archivePath = ''] = downloadedPaths();
+    expect(basename(archivePath)).toBe('stackorder_1.2.3_windows_amd64.zip');
+    expect(tc.extractZip).toHaveBeenCalledWith(archivePath);
     expect(tc.extractTar).not.toHaveBeenCalled();
     expect(core.setOutput).toHaveBeenCalledWith('path', join(`${toolCache}/1.2.3/amd64`, 'stackorder.exe'));
   });

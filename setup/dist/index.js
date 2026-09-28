@@ -23041,8 +23041,10 @@ function errorMessage(error2) {
 }
 
 // setup/src/install.ts
+import { randomUUID as randomUUID3 } from "node:crypto";
 import { existsSync as existsSync3 } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join as join4 } from "node:path";
 
 // node_modules/@actions/tool-cache/lib/tool-cache.js
@@ -23578,8 +23580,9 @@ async function install(version, target, verify) {
 async function download(version, target, file) {
   const url = releaseAssetUrl(version, file);
   info(`Downloading ${url}`);
+  const dest = join4(process.env["RUNNER_TEMP"] || tmpdir(), randomUUID3(), file);
   try {
-    return await downloadTool(url);
+    return await downloadTool(url, dest);
   } catch (error2) {
     const reason = error2 instanceof HTTPError && error2.httpStatusCode === 404 ? `HTTP 404, release v${version} or its asset ${file} does not exist` : errorMessage(error2);
     const context = `Could not download stackorder ${version} for ${target.os}/${target.arch} from ${url}`;
