@@ -181,6 +181,7 @@ Called from `stackorder-run.yml`, which the server dispatches once per wave and 
 | `server-url` | string | required | Base URL of the Stackorder server |
 | `aws-role-arn-map` | string | `''` | JSON object from stack path prefix to IAM role ARN; the longest matching prefix wins |
 | `aws-role-arn` | string | `''` | IAM role for every stack that matches no prefix in `aws-role-arn-map` |
+| `aws-plan-role-arn` | string | `''` | IAM role for plan and drift dispatches, which run under the `default` environment and never use `aws-role-arn-map`; empty falls back to `aws-role-arn` |
 | `aws-region` | string | `us-east-1` | AWS region for the credentials |
 | `tool` | string | `terraform` | `terraform` or `tofu`, used when an entry names no tool |
 | `tool-version` | string | `latest` | Tool version, used when an entry pins none |
@@ -209,7 +210,7 @@ A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
 
 ### Shared behaviour
 
-- **AWS role selection.** A small step picks the role for `matrix.stack`: the value of the longest key in `aws-role-arn-map` that the stack path starts with, otherwise `aws-role-arn`. When neither yields a role the job logs a notice and skips `configure-aws-credentials`, which suits self-hosted runners with an instance role. Reading `aws-role-arn-map` needs `jq` on the runner; GitHub-hosted runners have it, self-hosted runners may need it installed.
+- **AWS role selection.** A small step picks the role for `matrix.stack`: the value of the longest key in `aws-role-arn-map` that the stack path starts with, otherwise `aws-role-arn`. When neither yields a role the job logs a notice and skips `configure-aws-credentials`, which suits self-hosted runners with an instance role. Reading `aws-role-arn-map` needs `jq` on the runner; GitHub-hosted runners have it, self-hosted runners may need it installed. For `mode: plan` and `mode: drift` the map is ignored: those dispatches run under the `default` environment and assume `aws-plan-role-arn`, falling back to `aws-role-arn`.
 - **Tool selection.** The job sets `STACKORDER_TOOL` to the tool it installed, so the CLI always calls the binary that is on `PATH`.
 - **Plugin cache.** `TF_PLUGIN_CACHE_DIR` points at `$RUNNER_TEMP/terraform-plugin-cache`, cached with `actions/cache@v4` under a key built from the runner OS and architecture, the tool and the hash of the stack's `.terraform.lock.hcl`.
 - **Hooks.** `.stackorder/hooks/pre-plan.sh`, `post-plan.sh`, `pre-apply.sh` and `post-apply.sh` are run by the CLI itself, with `STACKORDER_STACK`, `STACKORDER_RUN_ID`, `STACKORDER_PLAN_JSON` and `STACKORDER_PLAN_FILE` set, so they behave the same in CI and on a laptop and need no workflow step.
@@ -250,6 +251,7 @@ Runs `stackorder resolve --server <server-url> [--base <base-ref>] [--stacks <st
 | `stacks` | `''` | Comma separated stack keys to restrict the run to |
 | `server-url` | required | Base URL of the Stackorder server |
 | `working-directory` | `.` | Directory to run `stackorder` in |
+| `github-token` | `${{ github.token }}` | Token used to post a neutral check when the server is unreachable |
 
 | Output | Description |
 | --- | --- |
@@ -272,6 +274,7 @@ Runs `stackorder plan --stack <stack> --run-id <run-id> --server <server-url>` w
 | `working-directory` | `.` | Directory to run `stackorder` in |
 | `upload-artifact` | `true` | Upload the plan file; only `true` uploads |
 | `retention-days` | `5` | Days to keep the plan artifact |
+| `github-token` | `${{ github.token }}` | Token used to post a neutral check when the server is unreachable |
 
 | Output | Description |
 | --- | --- |
@@ -309,6 +312,7 @@ Runs `stackorder drift --stack <stack> --run-id <run-id> --server <server-url>`.
 | `run-id` | required | Stackorder run id |
 | `server-url` | required | Base URL of the Stackorder server |
 | `working-directory` | `.` | Directory to run `stackorder` in |
+| `github-token` | `${{ github.token }}` | Token used to post a neutral check when the server is unreachable |
 
 | Output | Description |
 | --- | --- |

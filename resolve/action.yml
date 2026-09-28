@@ -5,10 +5,11 @@ inputs:
   stacks: { description: "Comma separated stack keys to restrict the run to. Empty resolves every affected stack.", default: "" }
   server-url: { description: "Base URL of the Stackorder server.", required: true }
   working-directory: { description: "Directory to run stackorder in.", default: "." }
+  github-token: { description: "Token used to post a neutral check when the server is unreachable.", default: "${{ github.token }}" }
 outputs:
   matrix: { description: "JSON object with an include list of stack entries, for strategy.matrix.", value: "${{ steps.resolve.outputs.matrix }}" }
   waves: { description: "JSON array of stack keys per wave.", value: "${{ steps.resolve.outputs.waves }}" }
-  affected: { description: "JSON array of affected stacks and why each is affected.", value: "${{ steps.resolve.outputs.affected }}" }
+  affected: { description: "JSON array of affected stack keys.", value: "${{ steps.resolve.outputs.affected }}" }
   count: { description: "Number of affected stacks.", value: "${{ steps.resolve.outputs.count }}" }
   run-id: { description: "Stackorder run id.", value: "${{ steps.resolve.outputs.run-id }}" }
   unconfirmed: { description: "true when the server was unreachable and the CLI resolved locally.", value: "${{ steps.resolve.outputs.unconfirmed }}" }
@@ -22,4 +23,5 @@ runs:
         SERVER_URL: ${{ inputs.server-url }}
         BASE_REF: ${{ inputs.base-ref }}
         STACKS: ${{ inputs.stacks }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: stackorder resolve --server "$SERVER_URL" ${BASE_REF:+--base "$BASE_REF"} ${STACKS:+--stacks "$STACKS"}

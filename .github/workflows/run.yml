@@ -35,6 +35,10 @@ on:
         description: IAM role to assume for every stack that matches no prefix in aws-role-arn-map. Empty with no match skips AWS credentials.
         type: string
         default: ""
+      aws-plan-role-arn:
+        description: IAM role for plan and drift dispatches, which run under the default environment and never use aws-role-arn-map. Empty falls back to aws-role-arn.
+        type: string
+        default: ""
       aws-region:
         description: AWS region for the credentials.
         type: string
@@ -118,11 +122,17 @@ jobs:
       - name: Select AWS role
         id: role
         env:
+          MODE: ${{ inputs.mode }}
           ROLE_MAP: ${{ inputs.aws-role-arn-map }}
           DEFAULT_ROLE: ${{ inputs.aws-role-arn }}
+          PLAN_ROLE: ${{ inputs.aws-plan-role-arn }}
           STACK_PATH: ${{ matrix.stack }}
         run: |
           role="$DEFAULT_ROLE"
+          if [ "$MODE" != "apply" ]; then
+            role="${PLAN_ROLE:-$DEFAULT_ROLE}"
+            ROLE_MAP=""
+          fi
           if [ -n "$ROLE_MAP" ]; then
             match=$(jq -r --arg stack "$STACK_PATH" \
               '[to_entries[] | select(.key as $prefix | $stack | startswith($prefix))] | max_by(.key | length) | .value // empty' \

@@ -5,6 +5,7 @@ inputs:
   run-id: { description: "Stackorder run id from the dispatch input.", required: true }
   server-url: { description: "Base URL of the Stackorder server.", required: true }
   working-directory: { description: "Directory to run stackorder in.", default: "." }
+  github-token: { description: "Token used to post a neutral check when the server is unreachable.", default: "${{ github.token }}" }
 outputs:
   drifted: { description: "true when the stack's real infrastructure differs from its configuration.", value: "${{ steps.drift.outputs.drifted }}" }
   summary: { description: "JSON summary of the drift.", value: "${{ steps.drift.outputs.summary }}" }
@@ -19,6 +20,7 @@ runs:
         STACK: ${{ inputs.stack }}
         RUN_ID: ${{ inputs.run-id }}
         SERVER_URL: ${{ inputs.server-url }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: |
         code=0
         stackorder drift --stack "$STACK" --run-id "$RUN_ID" --server "$SERVER_URL" || code=$?

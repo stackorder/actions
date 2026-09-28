@@ -7,6 +7,7 @@ inputs:
   working-directory: { description: "Directory to run stackorder in.", default: "." }
   upload-artifact: { description: "Upload the plan file as the artifact named by the artifact output; only 'true' uploads.", default: "true" }
   retention-days: { description: "Days to keep the plan artifact.", default: "5" }
+  github-token: { description: "Token used to post a neutral check when the server is unreachable.", default: "${{ github.token }}" }
 outputs:
   has-changes: { description: "true when the plan changes resources or outputs.", value: "${{ steps.plan.outputs.has-changes }}" }
   artifact: { description: "Name of the plan artifact.", value: "${{ steps.plan.outputs.artifact }}" }
@@ -24,6 +25,7 @@ runs:
         RUN_ID: ${{ inputs.run-id }}
         SERVER_URL: ${{ inputs.server-url }}
         STACKORDER_PLAN_DIR: ${{ github.workspace }}/.stackorder/plans
+        GITHUB_TOKEN: ${{ inputs.github-token }}
       run: stackorder plan --stack "$STACK" --run-id "$RUN_ID" --server "$SERVER_URL"
     - if: inputs.upload-artifact == 'true'
       uses: actions/upload-artifact@v4
