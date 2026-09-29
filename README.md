@@ -234,6 +234,37 @@ A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
 - **Hooks.** `.stackorder/hooks/pre-plan.sh`, `post-plan.sh`, `pre-apply.sh` and `post-apply.sh` are run by the CLI itself, with `STACKORDER_STACK`, `STACKORDER_RUN_ID`, `STACKORDER_PLAN_JSON` and `STACKORDER_PLAN_FILE` set, so they behave the same in CI and on a laptop and need no workflow step.
 - **Internal action references.** The reusable workflows use `stackorder/actions/setup@v1` and the other actions at `@v1`. A reusable workflow cannot refer to actions in its own repository by relative path when another repository calls it, so it names them in full; this repository's CI runs the same actions from their local paths.
 
+### AWS roles for stack instances
+
+A stack directory with several instances, such as `infra/kyc:production` and `infra/kyc:staging`, can get its AWS access in two ways.
+
+**One OIDC role per instance.** Map each instance to its own role. The GitHub environment of each apply job gates it, and each role's trust policy can require that environment:
+
+```yaml
+      aws-role-arn-map: '{":production": "arn:aws:iam::111111111111:role/stackorder-apply", ":staging": "arn:aws:iam::222222222222:role/stackorder-apply", "infra/kyc:production": "arn:aws:iam::111111111111:role/stackorder-apply-kyc"}'
+```
+
+Pull request plans use the same map with `plan.yml`'s `aws-role-arn` as the fallback, while server-dispatched plans and drift checks assume the single `aws-plan-role-arn`, so that role must be able to read every instance's state.
+
+**One bootstrap role, provider `assume_role` per instance.** The workflows assume one OIDC role per mode: `aws-role-arn` in `plan.yml` for pull request plans, and in `run.yml` `aws-plan-role-arn` for plan and drift dispatches and `aws-role-arn` for applies. The Terraform or OpenTofu provider then assumes the instance's own role in its `assume_role` block, read from a variable that the repository's `env` configuration in `stackorder.yaml` sets per instance, with a `plan` and an `apply` value (see [`env`](https://github.com/stackorder/stackorder/blob/main/docs/configuration/instances.md#env) and [AWS roles](https://github.com/stackorder/stackorder/blob/main/docs/configuration/instances.md#aws-roles) in the Stackorder documentation). Declare that variable `ephemeral` (Terraform 1.10 or later, OpenTofu 1.11 or later): the value of a non-ephemeral variable is frozen in the saved plan, so an apply would otherwise assume the plan-time role. The workflow side is only the two roles:
+
+```yaml
+# stackorder-plan.yml
+    with:
+      aws-role-arn: arn:aws:iam::123456789012:role/stackorder-bootstrap-plan
+      aws-role-session-name: stackorder-plan
+```
+
+```yaml
+# stackorder-run.yml
+    with:
+      aws-plan-role-arn: arn:aws:iam::123456789012:role/stackorder-bootstrap-plan
+      aws-role-arn: arn:aws:iam::123456789012:role/stackorder-bootstrap-apply
+      aws-role-session-name: '{"plan": "stackorder-plan", "apply": "stackorder-apply"}'
+```
+
+Each bootstrap role needs `sts:AssumeRole` on the instance roles, and each instance role must trust it. A session reached by role chaining lasts at most one hour, whatever the role's maximum session duration, so a longer plan or apply fails when its credentials expire.
+
 ## Actions
 
 The composite actions contain no logic beyond passing inputs to the CLI, so any of them can be replaced by a direct `run: stackorder …` step. They expect `stackorder` on `PATH` (from [`setup`](#setup)); inputs are passed through environment variables, never interpolated into scripts.
