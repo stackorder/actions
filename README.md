@@ -162,6 +162,7 @@ Called from `stackorder-plan.yml` on `pull_request`. Three jobs:
 | `server-url` | string | required | Base URL of the Stackorder server |
 | `aws-role-arn` | string | `''` | IAM role for every stack that matches no key in `aws-role-arn-map` |
 | `aws-role-arn-map` | string | `''` | JSON object from `prefix/`, `path:instance` or `:instance` to IAM role ARN (see [AWS role selection](#shared-behaviour)) |
+| `aws-role-session-name` | string | `''` | Role session name, or a JSON object whose `plan` key is used; empty keeps the `configure-aws-credentials` default (see [Role session name](#shared-behaviour)) |
 | `aws-region` | string | `us-east-1` | AWS region for the credentials |
 | `tool` | string | `terraform` | `terraform` or `tofu`, used when a stack's matrix entry names no tool |
 | `tool-version` | string | `latest` | Tool version, used when a stack's matrix entry pins none |
@@ -191,6 +192,7 @@ Called from `stackorder-run.yml`, which the server dispatches once per wave and 
 | `aws-role-arn-map` | string | `''` | JSON object from `prefix/`, `path:instance` or `:instance` to the IAM role ARN for applies (see [AWS role selection](#shared-behaviour)) |
 | `aws-role-arn` | string | `''` | IAM role for every stack that matches no key in `aws-role-arn-map` |
 | `aws-plan-role-arn` | string | `''` | IAM role for plan and drift dispatches, which run under the `default` environment and never use `aws-role-arn-map`; empty falls back to `aws-role-arn` |
+| `aws-role-session-name` | string | `''` | Role session name, or a JSON object with `plan`, `apply` and `drift` keys; empty keeps the `configure-aws-credentials` default (see [Role session name](#shared-behaviour)) |
 | `aws-region` | string | `us-east-1` | AWS region for the credentials |
 | `tool` | string | `terraform` | `terraform` or `tofu`, used when an entry names no tool |
 | `tool-version` | string | `latest` | Tool version, used when an entry pins none |
@@ -226,6 +228,7 @@ A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
   3. a path prefix such as `stacks/prod/`, matched on whole path segments (`stacks/prod/` and `stacks/prod` both match `stacks/prod/vpc`, `stacks/pro` does not); the longest matching prefix wins.
 
   With no match the step uses `aws-role-arn`. When neither yields a role the job logs a notice and skips `configure-aws-credentials`, which suits self-hosted runners with an instance role. Reading `aws-role-arn-map` needs `jq` on the runner; GitHub-hosted runners have it, self-hosted runners may need it installed. For `mode: plan` and `mode: drift` in `run.yml` the map is ignored: those dispatches run under the `default` environment and assume `aws-plan-role-arn`, falling back to `aws-role-arn`. Pull request plans in `plan.yml` use the map.
+- **Role session name.** `aws-role-session-name` is passed to `configure-aws-credentials` as `role-session-name`, so CloudTrail shows which workflow assumed the role. It is either a name or a JSON object with `plan`, `apply` and `drift` keys, such as `{"plan": "stackorder-plan", "apply": "stackorder-apply"}`; `drift` falls back to `plan`, and `plan.yml` always uses `plan`. Characters outside `[\w+=,.@-]` become `-` and the name is cut to 64 characters, the limits AWS sets. An empty name, or a JSON object with no value for the mode, keeps the action's default, `GitHubActions`.
 - **Tool selection.** The job sets `STACKORDER_TOOL` to the tool it installed, so the CLI always calls the binary that is on `PATH`.
 - **Plugin cache.** `TF_PLUGIN_CACHE_DIR` points at `$RUNNER_TEMP/terraform-plugin-cache`, cached with `actions/cache@v4` under a key built from the runner OS and architecture, the tool and the hash of the stack's `.terraform.lock.hcl`, found under `working-directory`.
 - **Hooks.** `.stackorder/hooks/pre-plan.sh`, `post-plan.sh`, `pre-apply.sh` and `post-apply.sh` are run by the CLI itself, with `STACKORDER_STACK`, `STACKORDER_RUN_ID`, `STACKORDER_PLAN_JSON` and `STACKORDER_PLAN_FILE` set, so they behave the same in CI and on a laptop and need no workflow step.

@@ -220,3 +220,48 @@ describe('Select AWS role', () => {
     expect(runStep(plan, 'plan', 'Select AWS role', context).outputs.arn).toBe(INSTANCE_ROLE);
   });
 });
+
+describe('Select AWS role session name', () => {
+  const run = readWorkflow('run.yml');
+  const plan = readWorkflow('plan.yml');
+  const sessionName = (workflow: Workflow, job: string, mode: string, name: string): string =>
+    runStep(workflow, job, 'Select AWS role session name', {
+      github: { sha: PUSH_SHA, event: {} },
+      inputs: { mode, 'aws-role-session-name': name },
+    }).outputs.name ?? '';
+
+  it('runs the same script in run.yml and plan.yml', () => {
+    expect(findStep(plan, 'plan', 'Select AWS role session name').run).toBe(
+      findStep(run, 'run', 'Select AWS role session name').run,
+    );
+  });
+
+  it('passes a plain name through for every mode', () => {
+    for (const mode of ['plan', 'apply', 'drift']) {
+      expect(sessionName(run, 'run', mode, 'stackorder-kyc')).toBe('stackorder-kyc');
+    }
+    expect(sessionName(plan, 'plan', '', 'stackorder-kyc')).toBe('stackorder-kyc');
+  });
+
+  it('picks the name for the mode from a JSON object, drift falling back to plan', () => {
+    const names = JSON.stringify({ plan: 'kyc-plan', apply: 'kyc-apply' });
+
+    expect(sessionName(run, 'run', 'plan', names)).toBe('kyc-plan');
+    expect(sessionName(run, 'run', 'apply', names)).toBe('kyc-apply');
+    expect(sessionName(run, 'run', 'drift', names)).toBe('kyc-plan');
+    expect(sessionName(run, 'run', 'drift', JSON.stringify({ plan: 'kyc-plan', drift: 'kyc-drift' }))).toBe('kyc-drift');
+    expect(sessionName(plan, 'plan', 'apply', names)).toBe('kyc-plan');
+    expect(sessionName(run, 'run', 'apply', JSON.stringify({ plan: 'kyc-plan' }))).toBe('');
+  });
+
+  it('replaces characters outside [\\w+=,.@-] and cuts the name to 64 characters', () => {
+    expect(sessionName(run, 'run', 'apply', 'stackorder infra/kyc:production')).toBe('stackorder-infra-kyc-production');
+    expect(sessionName(run, 'run', 'apply', 'café')).toBe('caf--');
+    expect(sessionName(run, 'run', 'apply', 'a+b=c,d.e@f_g-h')).toBe('a+b=c,d.e@f_g-h');
+    expect(sessionName(run, 'run', 'apply', 'x'.repeat(100))).toBe('x'.repeat(64));
+  });
+
+  it('is empty when the input is empty, so configure-aws-credentials keeps its default', () => {
+    expect(sessionName(run, 'run', 'apply', '')).toBe('');
+  });
+});

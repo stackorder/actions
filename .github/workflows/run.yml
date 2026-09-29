@@ -39,6 +39,10 @@ on:
         description: IAM role for plan and drift dispatches, which run under the default environment and never use aws-role-arn-map. Empty falls back to aws-role-arn.
         type: string
         default: ""
+      aws-role-session-name:
+        description: AWS role session name, or a JSON object with plan, apply and drift keys (drift falls back to plan). Characters outside [\w+=,.@-] become - and the name is cut to 64 characters. Empty keeps the configure-aws-credentials default.
+        type: string
+        default: ""
       aws-region:
         description: AWS region for the credentials.
         type: string
@@ -147,10 +151,23 @@ jobs:
             echo "::notice::No AWS role for $STACK_KEY in aws-role-arn or aws-role-arn-map; skipping AWS credentials"
           fi
           echo "arn=$role" >> "$GITHUB_OUTPUT"
+      - name: Select AWS role session name
+        id: session
+        env:
+          MODE: ${{ inputs.mode }}
+          SESSION_NAME: ${{ inputs.aws-role-session-name }}
+        run: |
+          name="$SESSION_NAME"
+          if [[ "$name" =~ ^[[:space:]]*\{ ]]; then
+            name=$(jq -r --arg mode "$MODE" '.[$mode] // (if $mode == "drift" then .plan else null end) // empty' <<<"$SESSION_NAME")
+          fi
+          name=$(printf '%s' "$name" | LC_ALL=C tr -c 'A-Za-z0-9_+=,.@-' '-')
+          echo "name=${name:0:64}" >> "$GITHUB_OUTPUT"
       - if: steps.role.outputs.arn != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ steps.role.outputs.arn }}
+          role-session-name: ${{ steps.session.outputs.name }}
           aws-region: ${{ inputs.aws-region }}
       - name: Prepare plugin cache
         run: |

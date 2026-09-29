@@ -15,6 +15,10 @@ on:
         description: JSON object from a stack path prefix such as stacks/prod/, an exact stack key path:instance or :instance (that instance in any directory) to IAM role ARN. An exact key wins, then :instance, then the longest matching prefix.
         type: string
         default: ""
+      aws-role-session-name:
+        description: AWS role session name, or a JSON object whose plan key is used. Characters outside [\w+=,.@-] become - and the name is cut to 64 characters. Empty keeps the configure-aws-credentials default.
+        type: string
+        default: ""
       aws-region:
         description: AWS region for the credentials.
         type: string
@@ -151,10 +155,23 @@ jobs:
             echo "::notice::No AWS role for $STACK_KEY in aws-role-arn or aws-role-arn-map; skipping AWS credentials"
           fi
           echo "arn=$role" >> "$GITHUB_OUTPUT"
+      - name: Select AWS role session name
+        id: session
+        env:
+          MODE: plan
+          SESSION_NAME: ${{ inputs.aws-role-session-name }}
+        run: |
+          name="$SESSION_NAME"
+          if [[ "$name" =~ ^[[:space:]]*\{ ]]; then
+            name=$(jq -r --arg mode "$MODE" '.[$mode] // (if $mode == "drift" then .plan else null end) // empty' <<<"$SESSION_NAME")
+          fi
+          name=$(printf '%s' "$name" | LC_ALL=C tr -c 'A-Za-z0-9_+=,.@-' '-')
+          echo "name=${name:0:64}" >> "$GITHUB_OUTPUT"
       - if: steps.role.outputs.arn != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ steps.role.outputs.arn }}
+          role-session-name: ${{ steps.session.outputs.name }}
           aws-region: ${{ inputs.aws-region }}
       - name: Prepare plugin cache
         run: |
