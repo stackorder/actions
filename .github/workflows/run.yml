@@ -135,7 +135,7 @@ jobs:
           fi
           if [ -n "$ROLE_MAP" ]; then
             match=$(jq -r --arg stack "$STACK_PATH" \
-              '[to_entries[] | select(.key as $prefix | $stack | startswith($prefix))] | max_by(.key | length) | .value // empty' \
+              '[to_entries[] | select(.key as $prefix | ($stack + "/") | startswith(if ($prefix | endswith("/")) then $prefix else $prefix + "/" end))] | max_by(.key | length) | .value // empty' \
               <<<"$ROLE_MAP")
             role="${match:-$role}"
           fi
