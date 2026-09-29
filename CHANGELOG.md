@@ -12,7 +12,7 @@ The first release. It requires [stackorder/stackorder](https://github.com/stacko
 
 - `setup` JavaScript action (`node24`): installs the `stackorder` CLI for linux, darwin and windows on amd64 and arm64, resolves `latest` through the GitHub releases API (sending `github.token` only on github.com), verifies the archive's SHA-256 against the release checksums file, caches it with `@actions/tool-cache` and adds it to `PATH`; outputs `version` and `path`.
 - `resolve` composite action: runs `stackorder resolve` and exposes `matrix`, `waves`, `affected`, `count`, `run-id` and `unconfirmed`.
-- `plan` composite action: runs `stackorder plan` for one stack and uploads the plan file as the `stackorder-plan-<key>-<sha>` artifact.
+- `plan` composite action: runs `stackorder plan` for one stack and uploads the plan file as the `stackorder-plan-<slug>-<sha>` artifact, the slug being the stack key made path-safe plus 8 hex characters of its SHA-256.
 - `apply` composite action: downloads the plan artifact from the plan run and runs `stackorder apply` with it.
 - `drift` composite action: runs `stackorder drift`, treating exit code 2 as drift found rather than a failure.
 - Reusable `plan.yml` workflow for pull requests: a resolve job that scans the pull request head and resolves the `stackorder` version once, one plan job per affected stack checking out the entry's `sha`, and a job summary instead of plans for fork pull requests. `pull_request_target` is not supported.

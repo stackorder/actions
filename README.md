@@ -213,7 +213,7 @@ A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
   "plan_output": "full",
   "sha": "4f1c0de2b9a8e7d6c5b4a3928170f6e5d4c3b2a1",
   "plan_run_id": 16123456789,
-  "artifact": "stackorder-plan-stacks-prod-vpc-4f1c0de2b9a8e7d6c5b4a3928170f6e5d4c3b2a1"
+  "artifact": "stackorder-plan-stacks-prod-vpc-69df0ef0-4f1c0de2b9a8e7d6c5b4a3928170f6e5d4c3b2a1"
 }
 ```
 
@@ -273,7 +273,7 @@ Runs `stackorder resolve --server <server-url> [--base <base-ref>] [--stacks <st
 
 ### plan
 
-Runs `stackorder plan --stack <stack> --run-id <run-id> --server <server-url>` with `STACKORDER_PLAN_DIR` set to `$GITHUB_WORKSPACE/.stackorder/plans`, then uploads the plan file with `actions/upload-artifact@v4` under the name the CLI reports (`stackorder-plan-<key>-<sha>`), failing if the file is missing.
+Runs `stackorder plan --stack <stack> --run-id <run-id> --server <server-url>` with `STACKORDER_PLAN_DIR` set to `$GITHUB_WORKSPACE/.stackorder/plans`, then uploads the plan file with `actions/upload-artifact@v4` under the name the CLI reports (`stackorder-plan-<slug>-<sha>`, where the slug is the stack key with `/` and `:` replaced by `-` followed by `-` and the first 8 hex characters of the key's SHA-256), failing if the file is missing.
 
 | Input | Default | Description |
 | --- | --- | --- |
