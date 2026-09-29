@@ -1,10 +1,16 @@
-import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
 interface Step {
+  name?: string;
   uses?: string;
   with?: Record<string, string>;
+  env?: Record<string, string>;
+  run?: string;
 }
 
 interface Workflow {
@@ -13,12 +19,24 @@ interface Workflow {
 
 interface Context {
   github: { sha: string; event: Record<string, unknown> };
+  inputs?: Record<string, unknown>;
   matrix?: Record<string, unknown>;
+}
+
+interface StepResult {
+  outputs: Record<string, string>;
+  stdout: string;
 }
 
 const MERGE_SHA = '1111111111111111111111111111111111111111';
 const HEAD_SHA = '2222222222222222222222222222222222222222';
 const PUSH_SHA = '3333333333333333333333333333333333333333';
+
+const DEFAULT_ROLE = 'arn:aws:iam::123456789012:role/default';
+const PLAN_ROLE = 'arn:aws:iam::123456789012:role/plan';
+const PREFIX_ROLE = 'arn:aws:iam::123456789012:role/prefix';
+const INSTANCE_ROLE = 'arn:aws:iam::123456789012:role/instance';
+const EXACT_ROLE = 'arn:aws:iam::123456789012:role/exact';
 
 function readWorkflow(name: string): Workflow {
   return parse(readFileSync(new URL(`../.github/workflows/${name}`, import.meta.url), 'utf8')) as Workflow;
@@ -61,6 +79,57 @@ function checkedOutCommit(workflow: Workflow, job: string, context: Context): st
   return evaluate(step.with?.ref, context) || context.github.sha;
 }
 
+function findStep(workflow: Workflow, job: string, name: string): Step {
+  const step = workflow.jobs[job]?.steps.find((candidate) => candidate.name === name);
+  if (step?.run === undefined) {
+    throw new Error(`job ${job} has no run step named ${name}`);
+  }
+  return step;
+}
+
+function runStep(workflow: Workflow, job: string, name: string, context: Context): StepResult {
+  const step = findStep(workflow, job, name);
+  const dir = mkdtempSync(join(tmpdir(), 'stackorder-step-'));
+  try {
+    const output = join(dir, 'output');
+    const env = Object.fromEntries(
+      Object.entries(step.env ?? {}).map(([key, value]) => [key, evaluate(value, context)]),
+    );
+    const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run ?? ''], {
+      env: { PATH: process.env.PATH, GITHUB_OUTPUT: output, ...env },
+      encoding: 'utf8',
+    });
+    if (result.status !== 0) {
+      throw new Error(`step ${name} exited ${String(result.status)}: ${result.stderr}`);
+    }
+    const lines = readFileSync(output, 'utf8').split('\n').filter((line) => line !== '');
+    const outputs = Object.fromEntries(
+      lines.map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
+    );
+    return { outputs, stdout: result.stdout };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function applyContext(roleMap: Record<string, string>, key: string, instance = ''): Context {
+  const [stack = key] = key.split(':');
+  return {
+    github: { sha: PUSH_SHA, event: {} },
+    inputs: {
+      mode: 'apply',
+      'aws-role-arn-map': JSON.stringify(roleMap),
+      'aws-role-arn': DEFAULT_ROLE,
+      'aws-plan-role-arn': PLAN_ROLE,
+    },
+    matrix: { key, stack, instance, workspace: '' },
+  };
+}
+
+function withInputs(context: Context, inputs: Record<string, unknown>): Context {
+  return { ...context, inputs: { ...context.inputs, ...inputs } };
+}
+
 describe('plan.yml', () => {
   const workflow = readWorkflow('plan.yml');
 
@@ -83,5 +152,71 @@ describe('plan.yml', () => {
     const context: Context = { github: { sha: PUSH_SHA, event: {} } };
 
     expect(checkedOutCommit(workflow, 'resolve', context)).toBe(PUSH_SHA);
+  });
+});
+
+describe('Select AWS role', () => {
+  const run = readWorkflow('run.yml');
+  const plan = readWorkflow('plan.yml');
+  const selectedRole = (context: Context): string => runStep(run, 'run', 'Select AWS role', context).outputs.arn ?? '';
+
+  it('runs the same script in run.yml and plan.yml', () => {
+    expect(findStep(plan, 'plan', 'Select AWS role').run).toBe(findStep(run, 'run', 'Select AWS role').run);
+  });
+
+  it('matches a prefix on whole path segments', () => {
+    expect(selectedRole(applyContext({ 'stacks/prod/': PREFIX_ROLE }, 'stacks/prod/vpc'))).toBe(PREFIX_ROLE);
+    expect(selectedRole(applyContext({ 'stacks/prod': PREFIX_ROLE }, 'stacks/prod/vpc'))).toBe(PREFIX_ROLE);
+    expect(selectedRole(applyContext({ 'stacks/pro': PREFIX_ROLE }, 'stacks/prod/vpc'))).toBe(DEFAULT_ROLE);
+  });
+
+  it('prefers the longest matching prefix', () => {
+    const roleMap = { 'stacks/': DEFAULT_ROLE.replace('default', 'stacks'), 'stacks/prod/': PREFIX_ROLE };
+
+    expect(selectedRole(applyContext(roleMap, 'stacks/prod/vpc'))).toBe(PREFIX_ROLE);
+  });
+
+  it('prefers an exact key, then :instance, then the longest prefix', () => {
+    const roleMap = { 'infra/': PREFIX_ROLE, ':production': INSTANCE_ROLE, 'infra/kyc:production': EXACT_ROLE };
+
+    expect(selectedRole(applyContext(roleMap, 'infra/kyc:production', 'production'))).toBe(EXACT_ROLE);
+    expect(selectedRole(applyContext(roleMap, 'infra/dns:production', 'production'))).toBe(INSTANCE_ROLE);
+    expect(selectedRole(applyContext(roleMap, 'infra/kyc:staging', 'staging'))).toBe(PREFIX_ROLE);
+  });
+
+  it('matches :instance in every directory', () => {
+    const roleMap = { ':staging': INSTANCE_ROLE };
+
+    expect(selectedRole(applyContext(roleMap, 'infra/kyc:staging', 'staging'))).toBe(INSTANCE_ROLE);
+    expect(selectedRole(applyContext(roleMap, 'infra/dns:staging', 'staging'))).toBe(INSTANCE_ROLE);
+    expect(selectedRole(applyContext(roleMap, 'infra/kyc:production', 'production'))).toBe(DEFAULT_ROLE);
+  });
+
+  it('reads the workspace as the instance of an entry without one', () => {
+    const context = applyContext({ ':blue': INSTANCE_ROLE }, 'stacks/sandbox/blue:blue');
+
+    expect(selectedRole({ ...context, matrix: { ...context.matrix, workspace: 'blue' } })).toBe(INSTANCE_ROLE);
+  });
+
+  it('falls back to aws-role-arn, then to no role, when no key matches', () => {
+    const context = applyContext({ 'stacks/prod/': PREFIX_ROLE }, 'stacks/staging/vpc');
+    const none = runStep(run, 'run', 'Select AWS role', withInputs(context, { 'aws-role-arn': '' }));
+
+    expect(selectedRole(context)).toBe(DEFAULT_ROLE);
+    expect(none.outputs.arn).toBe('');
+    expect(none.stdout).toContain('::notice::No AWS role for stacks/staging/vpc');
+  });
+
+  it.each(['plan', 'drift'])('ignores the map for %s dispatches and assumes the plan role', (mode) => {
+    const context = withInputs(applyContext({ 'infra/kyc:production': EXACT_ROLE }, 'infra/kyc:production', 'production'), { mode });
+
+    expect(selectedRole(context)).toBe(PLAN_ROLE);
+    expect(selectedRole(withInputs(context, { 'aws-plan-role-arn': '' }))).toBe(DEFAULT_ROLE);
+  });
+
+  it('uses the map for pull request plans', () => {
+    const context = applyContext({ ':production': INSTANCE_ROLE }, 'infra/kyc:production', 'production');
+
+    expect(runStep(plan, 'plan', 'Select AWS role', context).outputs.arn).toBe(INSTANCE_ROLE);
   });
 });

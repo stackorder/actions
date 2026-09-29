@@ -28,11 +28,11 @@ on:
         type: string
         required: true
       aws-role-arn-map:
-        description: JSON object from stack path prefix to IAM role ARN; the longest matching prefix wins.
+        description: JSON object from a stack path prefix such as stacks/prod/, an exact stack key path:instance or :instance (that instance in any directory) to the IAM role ARN for applies. An exact key wins, then :instance, then the longest matching prefix.
         type: string
         default: ""
       aws-role-arn:
-        description: IAM role to assume for every stack that matches no prefix in aws-role-arn-map. Empty with no match skips AWS credentials.
+        description: IAM role to assume for every stack that matches no key in aws-role-arn-map. Empty with no match skips AWS credentials.
         type: string
         default: ""
       aws-plan-role-arn:
@@ -126,21 +126,25 @@ jobs:
           ROLE_MAP: ${{ inputs.aws-role-arn-map }}
           DEFAULT_ROLE: ${{ inputs.aws-role-arn }}
           PLAN_ROLE: ${{ inputs.aws-plan-role-arn }}
+          STACK_KEY: ${{ matrix.key }}
           STACK_PATH: ${{ matrix.stack }}
+          INSTANCE: ${{ matrix.instance || matrix.workspace }}
         run: |
           role="$DEFAULT_ROLE"
-          if [ "$MODE" != "apply" ]; then
+          if [ "$MODE" = "plan" ] || [ "$MODE" = "drift" ]; then
             role="${PLAN_ROLE:-$DEFAULT_ROLE}"
             ROLE_MAP=""
           fi
           if [ -n "$ROLE_MAP" ]; then
-            match=$(jq -r --arg stack "$STACK_PATH" \
-              '[to_entries[] | select(.key as $prefix | ($stack + "/") | startswith(if ($prefix | endswith("/")) then $prefix else $prefix + "/" end))] | max_by(.key | length) | .value // empty' \
-              <<<"$ROLE_MAP")
+            match=$(jq -r --arg key "$STACK_KEY" --arg instance "$INSTANCE" --arg path "$STACK_PATH" '
+              (if $key != "" then .[$key] else null end)
+              // (if $instance != "" then .[":" + $instance] else null end)
+              // ([to_entries[] | select(.key as $prefix | ($prefix | contains(":") | not) and (($path + "/") | startswith(if ($prefix | endswith("/")) then $prefix else $prefix + "/" end)))] | max_by(.key | length) | .value)
+              // empty' <<<"$ROLE_MAP")
             role="${match:-$role}"
           fi
           if [ -z "$role" ]; then
-            echo "::notice::No AWS role for $STACK_PATH in aws-role-arn or aws-role-arn-map; skipping AWS credentials"
+            echo "::notice::No AWS role for $STACK_KEY in aws-role-arn or aws-role-arn-map; skipping AWS credentials"
           fi
           echo "arn=$role" >> "$GITHUB_OUTPUT"
       - if: steps.role.outputs.arn != ''
