@@ -1,7 +1,7 @@
 name: Stackorder drift
 description: Check one stack for drift with stackorder. Drift found is a result in the outputs, not a failed step.
 inputs:
-  stack: { description: "Stack key to check, as path or path:workspace.", required: true }
+  stack: { description: "Stack key to check, as path or path:instance.", required: true }
   run-id: { description: "Stackorder run id from the dispatch input.", required: true }
   server-url: { description: "Base URL of the Stackorder server.", required: true }
   working-directory: { description: "Directory to run stackorder in.", default: "." }

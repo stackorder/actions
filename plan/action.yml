@@ -1,7 +1,7 @@
 name: Stackorder plan
 description: Plan one stack with stackorder and upload the binary plan file as a workflow artifact.
 inputs:
-  stack: { description: "Stack key to plan, as path or path:workspace.", required: true }
+  stack: { description: "Stack key to plan, as path or path:instance.", required: true }
   run-id: { description: "Stackorder run id from the resolve step or the dispatch input.", required: true }
   server-url: { description: "Base URL of the Stackorder server.", required: true }
   working-directory: { description: "Directory to run stackorder in.", default: "." }

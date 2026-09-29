@@ -277,7 +277,7 @@ Runs `stackorder plan --stack <stack> --run-id <run-id> --server <server-url>` w
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `stack` | required | Stack key, as `path` or `path:workspace` |
+| `stack` | required | Stack key, as `path` or `path:instance` |
 | `run-id` | required | Stackorder run id |
 | `server-url` | required | Base URL of the Stackorder server |
 | `working-directory` | `.` | Directory to run `stackorder` in |
@@ -299,7 +299,7 @@ Downloads the artifact `artifact` from workflow run `plan-run-id` with `actions/
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `stack` | required | Stack key, as `path` or `path:workspace` |
+| `stack` | required | Stack key, as `path` or `path:instance` |
 | `run-id` | required | Stackorder run id |
 | `server-url` | required | Base URL of the Stackorder server |
 | `plan-run-id` | required | Actions workflow run id that uploaded the plan artifact |
@@ -317,7 +317,7 @@ Runs `stackorder drift --stack <stack> --run-id <run-id> --server <server-url>`.
 
 | Input | Default | Description |
 | --- | --- | --- |
-| `stack` | required | Stack key, as `path` or `path:workspace` |
+| `stack` | required | Stack key, as `path` or `path:instance` |
 | `run-id` | required | Stackorder run id |
 | `server-url` | required | Base URL of the Stackorder server |
 | `working-directory` | `.` | Directory to run `stackorder` in |

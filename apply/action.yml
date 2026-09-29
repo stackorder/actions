@@ -1,7 +1,7 @@
 name: Stackorder apply
 description: Download a stack's plan artifact from the run that planned it, then apply it with stackorder.
 inputs:
-  stack: { description: "Stack key to apply, as path or path:workspace.", required: true }
+  stack: { description: "Stack key to apply, as path or path:instance.", required: true }
   run-id: { description: "Stackorder run id from the dispatch input.", required: true }
   server-url: { description: "Base URL of the Stackorder server.", required: true }
   plan-run-id: { description: "Actions workflow run id that uploaded the plan artifact.", required: true }
