@@ -144,7 +144,7 @@ The caller grants the union: for `stackorder-plan.yml` that is `id-token: write`
 
 Called from `stackorder-plan.yml` on `pull_request`. Three jobs:
 
-- **`resolve`** checks out with full history, installs `stackorder`, runs the [`resolve`](#resolve) action and exposes `matrix`, `count`, `run-id`, `unconfirmed` and the installed `stackorder-version`, which every plan job installs in turn, so `latest` is resolved once per run. It runs only when the head repository is not a fork.
+- **`resolve`** checks out the pull request head, not the `refs/pull/N/merge` commit, with full history, installs `stackorder`, runs the [`resolve`](#resolve) action and exposes `matrix`, `count`, `run-id`, `unconfirmed` and the installed `stackorder-version`, which every plan job installs in turn, so `latest` is resolved once per run. It runs only when the head repository is not a fork.
 - **`plan`** runs once per affected stack from the resolve matrix, with `fail-fast: false` and `max-parallel`, and only when `count` is above zero. Each job checks out the entry's `sha`, the commit the resolve step scanned (the event's commit when the entry has none), installs Terraform (`hashicorp/setup-terraform@v3`) or OpenTofu (`opentofu/setup-opentofu@v1`) with the wrapper disabled, installs `stackorder`, selects the AWS role, assumes it with `aws-actions/configure-aws-credentials@v4`, restores the provider plugin cache keyed on the stack's `.terraform.lock.hcl`, and runs the [`plan`](#plan) action. Plan jobs never declare an `environment`, so planning is never held behind an environment's reviewers.
 - **`fork-notice`** runs instead when the head repository is a fork and explains in the job summary why nothing was planned (see [Fork pull requests](#fork-pull-requests)).
 

@@ -16,5 +16,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["setup/src", "setup/test", "*.ts"]
+  "include": ["setup/src", "setup/test", "test", "*.ts"]
 }
