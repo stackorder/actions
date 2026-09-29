@@ -155,7 +155,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/terraform-plugin-cache
-          key: stackorder-plugins-${{ runner.os }}-${{ runner.arch }}-${{ env.STACKORDER_TOOL }}-${{ hashFiles(format('{0}/.terraform.lock.hcl', matrix.stack)) }}
+          key: stackorder-plugins-${{ runner.os }}-${{ runner.arch }}-${{ env.STACKORDER_TOOL }}-${{ hashFiles(format('{0}/{1}/.terraform.lock.hcl', inputs.working-directory, matrix.stack)) }}
           restore-keys: |
             stackorder-plugins-${{ runner.os }}-${{ runner.arch }}-${{ env.STACKORDER_TOOL }}-
       - if: inputs.mode == 'plan'
