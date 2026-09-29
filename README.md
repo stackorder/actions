@@ -64,11 +64,14 @@ jobs:
     # so the environment's protection rules gate it
 ```
 
-Those two files show the shape, but they do not run as written. Three additions are required:
+Those two files show the shape, but they do not run as written. Four additions are required:
 
 - **`server-url`**. Both reusable workflows require the base URL of your Stackorder server.
 - **`permissions`**. A called workflow can only lower the `GITHUB_TOKEN` permissions its caller grants, never raise them, and `id-token: write` is never granted by default. The calling job must grant everything the called jobs use (see [Permissions](#permissions)).
 - **`sha`**. The server dispatches `stackorder-run.yml` with a `sha` input, the commit each job checks out, and `mode` is `plan`, `apply` or `drift`.
+- **`run-name`**. `stackorder-run.yml` must set `run-name: stackorder ${{ inputs.mode }} ${{ inputs.run_id }} wave ${{ inputs.wave }}`; the server recognises the workflow runs it dispatched by that title.
+
+Server-dispatched plans and drift checks run under the environment `default` and assume `aws-plan-role-arn` (falling back to `aws-role-arn`), so the complete `stackorder-run.yml` passes the plan role too.
 
 The complete files:
 
@@ -99,6 +102,7 @@ jobs:
 
 ```yaml
 name: stackorder run
+run-name: stackorder ${{ inputs.mode }} ${{ inputs.run_id }} wave ${{ inputs.wave }}
 on:
   workflow_dispatch:
     inputs:
@@ -122,6 +126,7 @@ jobs:
       wave: ${{ inputs.wave }}
       sha: ${{ inputs.sha }}
       stacks: ${{ inputs.stacks }}
+      aws-plan-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       aws-role-arn-map: '{"stacks/prod/": "arn:aws:iam::123456789012:role/stackorder-apply-prod", "stacks/staging/": "arn:aws:iam::123456789012:role/stackorder-apply-staging"}'
       # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
     secrets: inherit
