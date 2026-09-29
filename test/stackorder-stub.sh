@@ -23,16 +23,17 @@ case "$command" in
   resolve)
     {
       echo "run-id=00000000-0000-4000-8000-000000000001"
-      echo 'matrix={"include":[{"stack":"stacks/app","key":"stacks/app","workspace":"","environment":"default","wave":0,"tool":"terraform","tool_version":"","plan_output":"full"}]}'
-      echo 'waves=[["stacks/app"]]'
-      echo 'affected=[{"key":"stacks/app","path":"stacks/app","wave":0,"reasons":["changed"]}]'
+      echo 'matrix={"include":[{"stack":"stacks/app","key":"stacks/app:blue","instance":"blue","workspace":"","environment":"blue","wave":0,"tool":"terraform","tool_version":"","plan_output":"full"}]}'
+      echo 'waves=[["stacks/app:blue"]]'
+      echo 'affected=[{"key":"stacks/app:blue","path":"stacks/app","instance":"blue","wave":0,"reasons":["changed"]}]'
       echo "count=1"
       echo "unconfirmed=false"
     } >> "$GITHUB_OUTPUT"
     ;;
   plan)
     stack=$(flag --stack "$@")
-    artifact="stackorder-plan-${stack//\//-}-$GITHUB_SHA"
+    slug="${stack//[\/:]/-}-$(printf '%s' "$stack" | sha256sum | cut -c1-8)"
+    artifact="stackorder-plan-$slug-$GITHUB_SHA"
     mkdir -p "$STACKORDER_PLAN_DIR"
     echo "plan of $stack" > "$STACKORDER_PLAN_DIR/$artifact.tfplan"
     {
