@@ -2,6 +2,8 @@
 
 GitHub Actions and reusable workflows for [Stackorder](https://github.com/stackorder/stackorder), the lightweight Terraform and OpenTofu orchestrator on GitHub Actions.
 
+Version 1 of these actions and workflows requires [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later, for both the server and the `stackorder` CLI they install.
+
 All runner-side logic lives in the `stackorder` CLI. This repository installs it and wraps it: one JavaScript action that downloads and verifies the binary, four composite actions that only pass arguments to it, and two reusable workflows that your repository calls from two short workflow files. Nothing here uses Docker, so self-hosted runners without a Docker socket work unchanged.
 
 | Path | Kind | What it does |
@@ -91,6 +93,7 @@ jobs:
       server-url: https://stackorder.example.com
       aws-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       tool: tofu
+      # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
     secrets: inherit
 ```
 
@@ -120,6 +123,7 @@ jobs:
       sha: ${{ inputs.sha }}
       stacks: ${{ inputs.stacks }}
       aws-role-arn-map: '{"stacks/prod/": "arn:aws:iam::123456789012:role/stackorder-apply-prod", "stacks/staging/": "arn:aws:iam::123456789012:role/stackorder-apply-staging"}'
+      # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
     secrets: inherit
 ```
 
@@ -225,7 +229,7 @@ The composite actions contain no logic beyond passing inputs to the CLI, so any 
 ```yaml
 - uses: stackorder/actions/setup@v1
   with:
-    version: 1.2.3
+    version: 0.1.0
 ```
 
 Maps the runner to `linux`, `darwin` or `windows` and `amd64` or `arm64`, downloads `stackorder_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) from `https://github.com/stackorder/stackorder/releases/download/v<version>/`, checks it against the `sha256` line for that file in `stackorder_<version>_checksums.txt`, extracts it, caches it with `@actions/tool-cache` under the tool name `stackorder`, and adds it to `PATH`. A version already in the runner's tool cache is used without downloading. Any failure (unsupported runner, unknown version, missing asset, checksum mismatch, archive without the binary) fails the step with a message naming the version, platform and URL.
