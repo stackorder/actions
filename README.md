@@ -1,3 +1,20 @@
+<p align="center">
+  <a href="https://stackorder.io">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset=".github/assets/lockup-dark.svg">
+      <img alt="stackorder" src=".github/assets/lockup-light.svg" height="45">
+    </picture>
+  </a>
+</p>
+
+<p align="center">Lightweight Terraform and OpenTofu orchestration on GitHub Actions.</p>
+
+<p align="center">
+  <a href="https://stackorder.io">Website</a> ·
+  <a href="https://docs.stackorder.io">Documentation</a> ·
+  <a href="https://github.com/stackorder/stackorder">stackorder/stackorder</a>
+</p>
+
 # Stackorder Actions
 
 GitHub Actions and reusable workflows for [Stackorder](https://github.com/stackorder/stackorder), the lightweight Terraform and OpenTofu orchestrator on GitHub Actions.
