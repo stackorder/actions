@@ -143,12 +143,17 @@ jobs:
             failed=true
           }
           mask() {
-            local line
+            local line trimmed
             while IFS= read -r line; do
+              trimmed="${line#"${line%%[![:space:]]*}"}"
+              trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
               if [ -n "$line" ]; then
                 printf '::add-mask::%s\n' "${line//%/%25}"
               fi
-            done <<<"$1"
+              if [ -n "$trimmed" ] && [ "$trimmed" != "$line" ]; then
+                printf '::add-mask::%s\n' "${trimmed//%/%25}"
+              fi
+            done <<<"${1//$'\r'/$'\n'}"
           }
           allowed() {
             local source="$1" number="$2" name="$3" upper
@@ -157,8 +162,8 @@ jobs:
               return 1
             fi
             upper=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')
-            if [[ "$upper" =~ ^(GITHUB_|RUNNER_|ACTIONS_|STACKORDER_) ]] || [[ "$upper" =~ ^(PATH|HOME|NODE_OPTIONS|BASH_ENV|LD_PRELOAD)$ ]]; then
-              fail "The $source sets $name, a reserved name: GITHUB_*, RUNNER_*, ACTIONS_*, STACKORDER_*, PATH, HOME, NODE_OPTIONS, BASH_ENV and LD_PRELOAD cannot be set, in any letter case"
+            if [[ "$upper" =~ ^(GITHUB_|RUNNER_|ACTIONS_|STACKORDER_|LD_) ]] || [[ "$upper" =~ ^(PATH|HOME|NODE_OPTIONS|BASH_ENV|BASHOPTS|SHELLOPTS|PS4)$ ]]; then
+              fail "The $source sets $name, a reserved name: GITHUB_*, RUNNER_*, ACTIONS_*, STACKORDER_*, LD_*, PATH, HOME, NODE_OPTIONS, BASH_ENV, BASHOPTS, SHELLOPTS and PS4 cannot be set, in any letter case"
               return 1
             fi
           }
@@ -198,8 +203,8 @@ jobs:
               delimiter="${line%%"<<"*}"
               if [[ "$line" == *=* ]] && [ "${#name}" -lt "${#delimiter}" ]; then
                 value="${line#*=}"
-                if [ "$secret" = true ] && [ -n "$value" ]; then
-                  printf '::add-mask::%s\n' "${value//%/%25}"
+                if [ "$secret" = true ]; then
+                  mask "$value"
                 fi
                 if allowed "$source" "$number" "$name"; then
                   exports+="$name=$value"$'\n'
