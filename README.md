@@ -53,7 +53,6 @@ jobs:
     with:
       aws-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       tool: tofu
-    secrets: inherit
 ```
 
 **`.github/workflows/stackorder-run.yml`**
@@ -76,7 +75,6 @@ jobs:
       wave: ${{ inputs.wave }}
       stacks: ${{ inputs.stacks }}
       aws-role-arn-map: '{"stacks/prod/": "arn:aws:iam::123456789012:role/stackorder-apply-prod", "stacks/staging/": "arn:aws:iam::123456789012:role/stackorder-apply-staging"}'
-    secrets: inherit
     # each apply job runs under the GitHub environment from stackorder.yaml,
     # so the environment's protection rules gate it
 ```
@@ -88,7 +86,7 @@ Those two files show the shape, but they do not run as written. Four additions a
 - **`sha`**. The server dispatches `stackorder-run.yml` with a `sha` input, the commit each job checks out, and `mode` is `plan`, `apply` or `drift`.
 - **`run-name`**. `stackorder-run.yml` must set `run-name: stackorder ${{ inputs.mode }} ${{ inputs.run_id }} wave ${{ inputs.wave }}`; the server recognises the workflow runs it dispatched by that title.
 
-`secrets: inherit` in those two files passes nothing from a repository outside the `stackorder` organization: GitHub passes inherited secrets only to a reusable workflow in the caller's own organization or enterprise. The complete files leave it out. To give Terraform or OpenTofu credentials besides AWS, pass the `env` secret explicitly (see [Provider credentials and environment variables](#provider-credentials-and-environment-variables)).
+Neither file passes `secrets: inherit`: GitHub passes inherited secrets only to a reusable workflow in the caller's own organization or enterprise, so from a repository outside the `stackorder` organization it passes nothing. To give Terraform or OpenTofu credentials besides AWS, pass the `env` secret by name (see [Provider credentials and environment variables](#provider-credentials-and-environment-variables)).
 
 Server-dispatched plans and drift checks run under the environment `default` and assume `aws-plan-role-arn` (falling back to `aws-role-arn`), so the complete `stackorder-run.yml` passes the plan role too.
 
@@ -298,7 +296,7 @@ Each bootstrap role needs `sts:AssumeRole` on the instance roles, and each insta
 AWS credentials come from the OIDC role. Every other credential a provider needs, and any other environment variable, reaches the jobs through two values that both workflows take:
 
 - the **`env` input**, for values that are not secret: they are in the workflow file and may show in the log;
-- the **`env` secret**, for secret values: the job registers every line of every value with `::add-mask::` before it exports anything, so the runner replaces them with `***` in the log.
+- the **`env` secret**, for secret values: the job registers every line of every value with `::add-mask::` before it exports anything, so the runner replaces them with `***` in the log. Keep other values out of it: a short value such as `1` or `true` would be replaced wherever it appears in the job's log.
 
 Both use the syntax of `$GITHUB_ENV`: one `KEY=VALUE` per line, or a multi-line value such as a PEM key between `KEY<<DELIMITER` and a line holding only `DELIMITER`.
 
@@ -313,10 +311,10 @@ EOF
 
 The `Export env` step runs in the `plan` job of `plan.yml` and the `run` job of `run.yml`, after `stackorder` is installed and before the AWS credentials step, and appends the input and then the secret to `$GITHUB_ENV`: for a name in both, the secret's value wins. The rules:
 
-- **Names.** A name matches `[A-Za-z_][A-Za-z0-9_]*`. Names starting with `GITHUB_`, `RUNNER_`, `ACTIONS_` or `STACKORDER_`, and `PATH`, `HOME`, `NODE_OPTIONS`, `BASH_ENV` and `LD_PRELOAD`, are refused in any letter case, since they would redirect the runner, the later steps or the `stackorder` CLI. These include the names the CLI refuses in the [`env` key of `stackorder.yaml`](https://docs.stackorder.io/configuration/instances#env).
-- **Errors.** A reserved name fails the job with an error naming it. A line that is neither `KEY=VALUE` nor `KEY<<DELIMITER`, `<<` with no delimiter, or a multi-line value with no closing line fails the job with the line's number, never its text. Every reserved name in both values is reported, reading a value stops at its first malformed line, and nothing is exported when there is any error.
+- **Names.** A name matches `[A-Za-z_][A-Za-z0-9_]*`. Names starting with `GITHUB_`, `RUNNER_`, `ACTIONS_`, `STACKORDER_` or `LD_`, and `PATH`, `HOME`, `NODE_OPTIONS`, `BASH_ENV`, `BASHOPTS`, `SHELLOPTS` and `PS4`, are refused in any letter case, since they would redirect the runner, the later steps or the `stackorder` CLI. These include the names the CLI refuses in the [`env` key of `stackorder.yaml`](https://docs.stackorder.io/configuration/instances#env). The list guards against mistakes; it is not a security boundary, since the stack's own code runs in the same job.
+- **Errors.** A reserved name, or a name that does not match, fails the job with an error naming the reserved name or the line's number, and reading goes on to report the others. A line that is neither `KEY=VALUE` nor `KEY<<DELIMITER`, `<<` with no delimiter, or a multi-line value with no closing line fails the job with the line's number and stops reading that value. An error never shows a line's text, and nothing is exported when there is any error.
 - **Blank lines** outside a multi-line value are skipped, and a trailing carriage return is dropped from every line.
-- **Later steps.** `configure-aws-credentials` sets the `AWS_` credential and region variables after this step, so they replace any of the same name from `env`. `TF_PLUGIN_CACHE_DIR` is set after it too.
+- **Later steps.** `configure-aws-credentials` sets `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_REGION` and `AWS_DEFAULT_REGION` after this step, so they replace any of the same name from `env`. Other `AWS_` variables, such as `AWS_PROFILE` or `AWS_ENDPOINT_URL`, stay set and change how the AWS SDKs and the S3 backend find credentials and endpoints. `TF_PLUGIN_CACHE_DIR` is set after this step too.
 
 #### Passing the `env` secret
 
