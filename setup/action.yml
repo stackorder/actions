@@ -3,7 +3,7 @@ description: Download the stackorder CLI release for the runner, verify its SHA-
 author: Stackorder
 branding:
   icon: layers
-  color: purple
+  color: orange
 
 inputs:
   version:
