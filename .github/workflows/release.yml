@@ -46,11 +46,27 @@ jobs:
           fi
           git tag -f "$major" "$GITHUB_SHA"
           git push -f origin "refs/tags/$major"
+      - name: Take the release notes from the changelog
+        run: |
+          awk -v version="${TAG#v}" '
+            /^## \[/ { printing = ($0 ~ "^## \\[" version "\\]") }
+            printing && !/^## \[/ { print }
+          ' CHANGELOG.md | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' > "$RUNNER_TEMP/notes.md"
+          if [ -s "$RUNNER_TEMP/notes.md" ]; then
+            echo "notes=$RUNNER_TEMP/notes.md" >> "$GITHUB_ENV"
+          else
+            echo "::warning::CHANGELOG.md has no section for $TAG; the release notes are generated from the commits"
+          fi
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          flags=(--repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes --verify-tag)
+          flags=(--repo "$GITHUB_REPOSITORY" --title "$TAG" --verify-tag)
+          if [ -n "${notes:-}" ]; then
+            flags+=(--notes-file "$notes")
+          else
+            flags+=(--generate-notes)
+          fi
           if [ "$PRERELEASE" = true ]; then
             flags+=(--prerelease)
           fi
