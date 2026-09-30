@@ -152,7 +152,7 @@ jobs:
             while IFS= read -r line; do
               trimmed="${line#"${line%%[![:space:]]*}"}"
               trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
-              if [ -n "$line" ]; then
+              if [ -n "$trimmed" ]; then
                 printf '::add-mask::%s\n' "${line//%/%25}"
               fi
               if [ -n "$trimmed" ] && [ "$trimmed" != "$line" ]; then

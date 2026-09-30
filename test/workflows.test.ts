@@ -481,6 +481,14 @@ describe('Export env', () => {
     expect(result.env).toBe('A=abc\rdef\nB= padded \nC<<EOF\n\tindented\nEOF\n');
   });
 
+  it('masks nothing for a value or multi-line value line of only whitespace', () => {
+    const result = exportEnv('', 'BLANK=   \nKEY<<EOF\n \t \nline\nEOF');
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('::add-mask::line\n');
+    expect(result.env).toBe('BLANK=   \nKEY<<EOF\n \t \nline\nEOF\n');
+  });
+
   it('masks the lines of an unterminated multi-line secret value', () => {
     const result = exportEnv('', 'KEY<<EOF\nsecret line');
 
