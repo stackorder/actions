@@ -1,5 +1,8 @@
 name: Stackorder plan
 description: Plan one stack with stackorder and upload the binary plan file as a workflow artifact.
+branding:
+  icon: layers
+  color: orange
 inputs:
   stack: { description: "Stack key to plan, as path or path:instance.", required: true }
   run-id: { description: "Stackorder run id from the resolve step or the dispatch input.", required: true }

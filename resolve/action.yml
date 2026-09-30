@@ -1,5 +1,8 @@
 name: Stackorder resolve
 description: Scan the repository, post its dependency graph to the Stackorder server and expose the plan matrix.
+branding:
+  icon: layers
+  color: orange
 inputs:
   base-ref: { description: "Git ref to diff against. Empty lets the CLI use the pull request base.", default: "" }
   stacks: { description: "Comma separated stack keys to restrict the run to. Empty resolves every affected stack.", default: "" }

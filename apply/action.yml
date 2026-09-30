@@ -1,5 +1,8 @@
 name: Stackorder apply
 description: Download a stack's plan artifact from the run that planned it, then apply it with stackorder.
+branding:
+  icon: layers
+  color: orange
 inputs:
   stack: { description: "Stack key to apply, as path or path:instance.", required: true }
   run-id: { description: "Stackorder run id from the dispatch input.", required: true }
