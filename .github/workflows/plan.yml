@@ -55,6 +55,14 @@ on:
         description: Comma separated stack keys to restrict the plan to. Empty plans every affected stack.
         type: string
         default: ""
+      env:
+        description: Environment variables for the plan jobs, as KEY=VALUE lines or KEY<<DELIMITER multi-line values, the syntax of $GITHUB_ENV.
+        type: string
+        default: ""
+    secrets:
+      env:
+        description: Environment variables with secret values for the plan jobs, in the syntax of the env input. Every value is masked.
+        required: false
 
 permissions: {}
 
@@ -128,6 +136,112 @@ jobs:
       - uses: stackorder/actions/setup@v1
         with:
           version: ${{ needs.resolve.outputs.stackorder-version }}
+      - name: Export env
+        env:
+          ENV_INPUT: ${{ inputs.env }}
+          ENV_SECRET: ${{ secrets.env }}
+        run: |
+          exports=""
+          failed=false
+          fail() {
+            echo "::error::$1"
+            failed=true
+          }
+          mask() {
+            local line
+            while IFS= read -r line; do
+              if [ -n "$line" ]; then
+                printf '::add-mask::%s\n' "${line//%/%25}"
+              fi
+            done <<<"$1"
+          }
+          allowed() {
+            local source="$1" number="$2" name="$3" upper
+            if ! [[ "$name" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+              fail "Line $number of the $source does not start with a variable name followed by = or <<"
+              return 1
+            fi
+            upper=$(printf '%s' "$name" | tr '[:lower:]' '[:upper:]')
+            if [[ "$upper" =~ ^(GITHUB_|RUNNER_|ACTIONS_|STACKORDER_) ]] || [[ "$upper" =~ ^(PATH|HOME|NODE_OPTIONS|BASH_ENV|LD_PRELOAD)$ ]]; then
+              fail "The $source sets $name, a reserved name: GITHUB_*, RUNNER_*, ACTIONS_*, STACKORDER_*, PATH, HOME, NODE_OPTIONS, BASH_ENV and LD_PRELOAD cannot be set, in any letter case"
+              return 1
+            fi
+          }
+          parse() {
+            local source="$1" secret="$2" text="$3"
+            local line number=0 start=0 name="" value="" delimiter="" count=0 open=false keep=false
+            while IFS= read -r line; do
+              number=$((number + 1))
+              line="${line%$'\r'}"
+              if [ "$open" = true ]; then
+                if [ "$line" != "$delimiter" ]; then
+                  if [ "$count" -eq 0 ]; then
+                    value="$line"
+                  else
+                    value+=$'\n'"$line"
+                  fi
+                  count=$((count + 1))
+                  continue
+                fi
+                open=false
+                if [ "$secret" = true ]; then
+                  mask "$value"
+                fi
+                if [ "$keep" = true ]; then
+                  exports+="$name<<$delimiter"$'\n'
+                  if [ "$count" -gt 0 ]; then
+                    exports+="$value"$'\n'
+                  fi
+                  exports+="$delimiter"$'\n'
+                fi
+                continue
+              fi
+              if [[ "$line" =~ ^[[:space:]]*$ ]]; then
+                continue
+              fi
+              name="${line%%=*}"
+              delimiter="${line%%"<<"*}"
+              if [[ "$line" == *=* ]] && [ "${#name}" -lt "${#delimiter}" ]; then
+                value="${line#*=}"
+                if [ "$secret" = true ] && [ -n "$value" ]; then
+                  printf '::add-mask::%s\n' "${value//%/%25}"
+                fi
+                if allowed "$source" "$number" "$name"; then
+                  exports+="$name=$value"$'\n'
+                fi
+              elif [[ "$line" == *"<<"* ]]; then
+                name="${line%%"<<"*}"
+                delimiter="${line#*"<<"}"
+                if [ -z "$delimiter" ]; then
+                  fail "Line $number of the $source starts a multi-line value with no delimiter after <<"
+                  return
+                fi
+                keep=false
+                if allowed "$source" "$number" "$name"; then
+                  keep=true
+                fi
+                open=true
+                start=$number
+                value=""
+                count=0
+              else
+                fail "Line $number of the $source is neither KEY=VALUE nor KEY<<DELIMITER"
+                return
+              fi
+            done <<<"$text"
+            if [ "$open" = true ]; then
+              if [ "$secret" = true ]; then
+                mask "$value"
+              fi
+              fail "The multi-line value that starts on line $start of the $source has no closing delimiter line"
+            fi
+          }
+          parse "env input" false "$ENV_INPUT"
+          parse "env secret" true "$ENV_SECRET"
+          if [ "$failed" = true ]; then
+            exit 1
+          fi
+          printf '%s' "$exports" >> "$GITHUB_ENV"
       - name: Select AWS role
         id: role
         env:
