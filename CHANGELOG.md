@@ -2,7 +2,9 @@
 
 All notable changes to this repository are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/). Each `vX.Y.Z` release also moves the `vX` tag.
 
-## [Unreleased]
+## [1.1.0] - 2026-09-30
+
+It works with [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later.
 
 ### Added
 
@@ -34,4 +36,5 @@ The first release. It requires [stackorder/stackorder](https://github.com/stacko
 - CI with lint, type checks, tests, a `setup/dist` freshness check, actionlint, a `setup` failure smoke test, a composite action test against a stub CLI and a `drift` exit code check; a release workflow that publishes release notes and moves the major tag when the release is the newest of its major.
 
 [Unreleased]: https://github.com/stackorder/actions/compare/v1.0.0...HEAD
+[1.1.0]: https://github.com/stackorder/actions/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/stackorder/actions/releases/tag/v1.0.0
