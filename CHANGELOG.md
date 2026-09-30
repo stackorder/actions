@@ -2,6 +2,17 @@
 
 All notable changes to this repository are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/). Each `vX.Y.Z` release also moves the `vX` tag.
 
+## [Unreleased]
+
+### Added
+
+- `env` input and optional `env` secret on `plan.yml` and `run.yml`: environment variables for Terraform or OpenTofu, the hooks and every later step of the plan and run jobs, as `KEY=VALUE` lines or `KEY<<DELIMITER` multi-line values, the syntax of `$GITHUB_ENV`. A step after `setup` and before the AWS credentials step masks every line of every value of the secret, exports the input and then the secret, and fails the job, exporting nothing, on a malformed line, reported by its number only, or on a reserved name: the `GITHUB_`, `RUNNER_`, `ACTIONS_` and `STACKORDER_` prefixes, `PATH`, `HOME`, `NODE_OPTIONS`, `BASH_ENV` and `LD_PRELOAD`, in any letter case. The `resolve` job never gets them.
+- README section on provider credentials: passing the `env` secret by name, since `secrets: inherit` passes nothing to a reusable workflow in another organization; an `ENV` environment secret replacing it for jobs under that GitHub environment; read-only tokens for plans and write tokens only in gated environments; examples with a Cloudflare API token and with an ephemeral `TF_VAR_` variable.
+
+### Changed
+
+- The complete caller files in the README no longer pass `secrets: inherit`, which gave the reusable workflows nothing from a repository outside the `stackorder` organization and which they never read.
+
 ## [1.0.0] - 2026-09-30
 
 The first release. It requires [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later, for the server and for the `stackorder` CLI that `setup` installs.
@@ -22,4 +33,5 @@ The first release. It requires [stackorder/stackorder](https://github.com/stacko
 - README header with the Stackorder logo, which follows the reader's light or dark theme, and links to stackorder.io, docs.stackorder.io and `stackorder/stackorder`; the README links to the design document and the Stack instances page on docs.stackorder.io. The logo files and the repository's social preview image are in `.github/assets/`.
 - CI with lint, type checks, tests, a `setup/dist` freshness check, actionlint, a `setup` failure smoke test, a composite action test against a stub CLI and a `drift` exit code check; a release workflow that publishes release notes and moves the major tag when the release is the newest of its major.
 
+[Unreleased]: https://github.com/stackorder/actions/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/stackorder/actions/releases/tag/v1.0.0
