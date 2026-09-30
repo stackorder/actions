@@ -425,7 +425,11 @@ describe('Export env', () => {
     'HOME',
     'NODE_OPTIONS',
     'BASH_ENV',
+    'BASHOPTS',
+    'SHELLOPTS',
+    'PS4',
     'LD_PRELOAD',
+    'ld_library_path',
   ])('refuses %s, naming it, and exports nothing', (name) => {
     const result = exportEnv(`TF_VAR_ok=1\n${name}=x`);
 
@@ -465,6 +469,16 @@ describe('Export env', () => {
     expect(result.stdout).toContain(`::error::${error}`);
     expect(result.stdout).not.toMatch(/::error::.*(no separator|secret line|1BAD|MY VAR)/);
     expect(result.env).toBe('');
+  });
+
+  it('masks a secret value split at a carriage return, and its trimmed form', () => {
+    const result = exportEnv('', 'A=abc\rdef\nB= padded \nC<<EOF\n\tindented\nEOF');
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe(
+      '::add-mask::abc\n::add-mask::def\n::add-mask:: padded \n::add-mask::padded\n::add-mask::\tindented\n::add-mask::indented\n',
+    );
+    expect(result.env).toBe('A=abc\rdef\nB= padded \nC<<EOF\n\tindented\nEOF\n');
   });
 
   it('masks the lines of an unterminated multi-line secret value', () => {
