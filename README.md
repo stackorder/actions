@@ -224,7 +224,7 @@ Called from `stackorder-run.yml`, which the server dispatches once per wave and 
 
 | Secret | Required | Description |
 | --- | --- | --- |
-| `env` | no | Environment variables with secret values for each job, in the syntax of the `env` input; every value is masked in the log. An environment secret named `ENV` on the job's GitHub environment takes its place |
+| `env` | no | Environment variables with secret values for each job, in the syntax of the `env` input; every value is masked in the log. An environment secret named `ENV` on the job's GitHub environment takes its place, but only when the caller passes `env`, even from an unset secret; without it the job gets an empty value. This is the runner's observed behaviour, which GitHub does not document |
 
 A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
 
@@ -318,7 +318,7 @@ The `Export env` step runs in the `plan` job of `plan.yml` and the `run` job of 
 
 #### Passing the `env` secret
 
-`secrets: inherit` gives a reusable workflow the caller's secrets only when both are in the same organization or enterprise. For a repository outside the `stackorder` organization it passes nothing, without an error, so pass the secret by name:
+`secrets: inherit` gives a reusable workflow the caller's secrets only when both are in the same organization or enterprise. For a repository outside the `stackorder` organization it passes nothing, so pass the secret by name:
 
 ```yaml
     secrets:
