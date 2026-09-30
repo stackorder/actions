@@ -7,16 +7,19 @@ All notable changes to this repository are documented here. The format follows [
 ### Added
 
 - `aws-role-arn-map` in `plan.yml` and `run.yml` accepts `path:instance` keys (an exact stack key) and `:instance` keys (that instance in any directory) next to path prefixes. An exact key wins, then `:instance`, then the longest matching prefix, then `aws-role-arn`; `run.yml` plan and drift dispatches still assume the single plan role.
-- `aws-role-session-name` input on `plan.yml` and `run.yml`: a role session name, or a JSON object with `plan`, `apply` and `drift` keys (drift falls back to plan), passed to `configure-aws-credentials` as `role-session-name` after replacing characters outside `[\w+=,.@-]` with `-` and cutting it to 64 characters. Empty keeps the action's default.
+- `aws-role-session-name` input on `plan.yml` and `run.yml`: a role session name, or a JSON object with `plan`, `apply` and `drift` keys (drift falls back to plan), passed to `configure-aws-credentials` as `role-session-name` after replacing characters outside `[\w+=,.@-]` with `-` and cutting it to 64 characters. Empty keeps the action's default; a one-character name fails the job with an error naming the input, since AWS needs 2 to 64 characters.
 - README section on AWS roles for stack instances: one OIDC role per instance through `aws-role-arn-map`, or one bootstrap role per mode with the provider assuming the instance's role.
 
 ### Changed
 
 - The `plan`, `apply` and `drift` actions and the README describe stack keys as `path` or `path:instance`.
+- The README requires each apply role's trust policy to pin its GitHub environment, and says never to pass the apply-role `aws-role-arn-map` to `plan.yml`: pull request plans run the pull request's code with no environment, so `plan.yml` gets a read-only plan role or a map of plan-only roles.
+- The README lists every variable a hook receives: `STACKORDER_STACK`, `STACKORDER_STACK_PATH`, `STACKORDER_INSTANCE`, `STACKORDER_RUN_ID`, `STACKORDER_PLAN_JSON`, `STACKORDER_PLAN_FILE` and the stack's configured `env` for the mode.
 
 ### Fixed
 
 - The provider plugin cache key hashes the stack's `.terraform.lock.hcl` under `working-directory`; it hashed a path relative to the repository root, so a `working-directory` other than `.` never keyed the cache on the lock file.
+- The README links to the Stack instances page without the `#env` and `#aws-roles` anchors, which GitHub does not resolve.
 
 ## [1.0.0] - 2026-09-29
 
