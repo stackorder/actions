@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -14,6 +14,7 @@ interface Step {
 }
 
 interface Workflow {
+  on: { workflow_call: { inputs: Record<string, unknown>; secrets?: Record<string, { required?: boolean }> } };
   jobs: Record<string, { steps: Step[] }>;
 }
 
@@ -21,11 +22,20 @@ interface Context {
   github: { sha: string; event: Record<string, unknown> };
   inputs?: Record<string, unknown>;
   matrix?: Record<string, unknown>;
+  secrets?: Record<string, unknown>;
 }
 
 interface StepResult {
   outputs: Record<string, string>;
   stdout: string;
+}
+
+interface StepRun {
+  status: number | null;
+  outputs: Record<string, string>;
+  env: string;
+  stdout: string;
+  stderr: string;
 }
 
 const MERGE_SHA = '1111111111111111111111111111111111111111';
@@ -91,29 +101,37 @@ function findStep(workflow: Workflow, job: string, name: string): Step {
   return step;
 }
 
-function runStep(workflow: Workflow, job: string, name: string, context: Context): StepResult {
+function execStep(workflow: Workflow, job: string, name: string, context: Context): StepRun {
   const step = findStep(workflow, job, name);
   const dir = mkdtempSync(join(tmpdir(), 'stackorder-step-'));
   try {
     const output = join(dir, 'output');
+    const githubEnv = join(dir, 'env');
+    writeFileSync(output, '');
+    writeFileSync(githubEnv, '');
     const env = Object.fromEntries(
       Object.entries(step.env ?? {}).map(([key, value]) => [key, evaluate(value, context)]),
     );
     const result = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', '-c', step.run ?? ''], {
-      env: { PATH: process.env.PATH, GITHUB_OUTPUT: output, ...env },
+      env: { PATH: process.env.PATH, GITHUB_OUTPUT: output, GITHUB_ENV: githubEnv, ...env },
       encoding: 'utf8',
     });
-    if (result.status !== 0) {
-      throw new Error(`step ${name} exited ${String(result.status)}: ${result.stdout}${result.stderr}`);
-    }
     const lines = readFileSync(output, 'utf8').split('\n').filter((line) => line !== '');
     const outputs = Object.fromEntries(
       lines.map((line) => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]),
     );
-    return { outputs, stdout: result.stdout };
+    return { status: result.status, outputs, env: readFileSync(githubEnv, 'utf8'), stdout: result.stdout, stderr: result.stderr };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+}
+
+function runStep(workflow: Workflow, job: string, name: string, context: Context): StepResult {
+  const result = execStep(workflow, job, name, context);
+  if (result.status !== 0) {
+    throw new Error(`step ${name} exited ${String(result.status)}: ${result.stdout}${result.stderr}`);
+  }
+  return { outputs: result.outputs, stdout: result.stdout };
 }
 
 function applyContext(roleMap: Record<string, string>, key: string, instance = ''): Context {
@@ -305,5 +323,153 @@ describe('AWS credentials and plugin cache steps', () => {
     expect(findUses(workflow, job, 'aws-actions/configure-aws-credentials').with?.['role-session-name']).toBe(
       '${{ steps.session.outputs.name }}',
     );
+  });
+});
+
+describe('Export env', () => {
+  const run = readWorkflow('run.yml');
+  const plan = readWorkflow('plan.yml');
+  const exportEnv = (input: string, secret = ''): StepRun =>
+    execStep(run, 'run', 'Export env', {
+      github: { sha: PUSH_SHA, event: {} },
+      inputs: { env: input },
+      secrets: { env: secret },
+    });
+
+  it('runs the same script in run.yml and plan.yml', () => {
+    expect(findStep(plan, 'plan', 'Export env').run).toBe(findStep(run, 'run', 'Export env').run);
+    expect(findStep(plan, 'plan', 'Export env').env).toEqual(findStep(run, 'run', 'Export env').env);
+  });
+
+  it.each([
+    { workflow: run, job: 'run' },
+    { workflow: plan, job: 'plan' },
+  ])('runs in $job after stackorder is installed and before AWS credentials', ({ workflow, job }) => {
+    const steps = workflow.jobs[job]?.steps ?? [];
+    const index = steps.findIndex((step) => step.name === 'Export env');
+    const setup = steps.findIndex((step) => step.uses?.startsWith('stackorder/actions/setup@'));
+    const credentials = steps.findIndex((step) => step.uses?.startsWith('aws-actions/configure-aws-credentials@'));
+
+    expect(setup).toBeGreaterThanOrEqual(0);
+    expect(index).toBeGreaterThan(setup);
+    expect(index).toBeLessThan(credentials);
+  });
+
+  it('is not in the resolve job', () => {
+    expect(plan.jobs.resolve?.steps.some((step) => step.name === 'Export env')).toBe(false);
+  });
+
+  it.each([
+    { workflow: run, name: 'run.yml' },
+    { workflow: plan, name: 'plan.yml' },
+  ])('declares an optional env input and env secret in $name', ({ workflow }) => {
+    expect(workflow.on.workflow_call.inputs.env).toMatchObject({ type: 'string', default: '' });
+    expect(workflow.on.workflow_call.secrets?.env?.required).toBe(false);
+  });
+
+  it('exports nothing when both are empty', () => {
+    const result = exportEnv('');
+
+    expect(result.status).toBe(0);
+    expect(result.env).toBe('');
+    expect(result.stdout).toBe('');
+  });
+
+  it('exports KEY=VALUE lines, skipping blank lines, and keeps = and << in values', () => {
+    const result = exportEnv('TF_VAR_region=eu-west-1\n\n  \nTF_LOG=\nQUERY=a=b<<c\r\n');
+
+    expect(result.status).toBe(0);
+    expect(result.env).toBe('TF_VAR_region=eu-west-1\nTF_LOG=\nQUERY=a=b<<c\n');
+    expect(result.stdout).toBe('');
+  });
+
+  it('exports a multi-line value with its delimiter', () => {
+    const pem = '-----BEGIN PRIVATE KEY-----\nMIIEvQ==\n-----END PRIVATE KEY-----';
+    const result = exportEnv(`TLS_KEY<<EOF\n${pem}\nEOF\nNEXT=1`);
+
+    expect(result.status).toBe(0);
+    expect(result.env).toBe(`TLS_KEY<<EOF\n${pem}\nEOF\nNEXT=1\n`);
+  });
+
+  it('keeps empty and blank lines inside a multi-line value, and accepts an empty one', () => {
+    const result = exportEnv('A<<X=Y\n\nline\n\nX=Y\nB<<EOF\nEOF');
+
+    expect(result.status).toBe(0);
+    expect(result.env).toBe('A<<X=Y\n\nline\n\nX=Y\nB<<EOF\nEOF\n');
+  });
+
+  it('exports the input before the secret, so the secret wins for the same name', () => {
+    const result = exportEnv('TF_VAR_token=public', 'TF_VAR_token=private');
+
+    expect(result.env).toBe('TF_VAR_token=public\nTF_VAR_token=private\n');
+  });
+
+  it('masks every value line of the secret, escaping %, and nothing of the input', () => {
+    const result = exportEnv('VISIBLE=plain', 'CLOUDFLARE_API_TOKEN=abc%0Adef\nEMPTY=\nKEY<<EOF\nline one\n\nline two\nEOF');
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toBe('::add-mask::abc%250Adef\n::add-mask::line one\n::add-mask::line two\n');
+    expect(result.env).toBe('VISIBLE=plain\nCLOUDFLARE_API_TOKEN=abc%0Adef\nEMPTY=\nKEY<<EOF\nline one\n\nline two\nEOF\n');
+  });
+
+  it.each([
+    'GITHUB_TOKEN',
+    'github_path',
+    'RUNNER_TEMP',
+    'ACTIONS_ID_TOKEN_REQUEST_URL',
+    'STACKORDER_RUN_ID',
+    'STACKORDER_TOOL',
+    'stackorder_plan_dir',
+    'PATH',
+    'Path',
+    'HOME',
+    'NODE_OPTIONS',
+    'BASH_ENV',
+    'LD_PRELOAD',
+  ])('refuses %s, naming it, and exports nothing', (name) => {
+    const result = exportEnv(`TF_VAR_ok=1\n${name}=x`);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`::error::The env input sets ${name}, a reserved name`);
+    expect(result.env).toBe('');
+  });
+
+  it('refuses a reserved name that starts a multi-line value in the secret, masking the value', () => {
+    const result = exportEnv('', 'PATH<<EOF\n/tmp/evil\nEOF');
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('::add-mask::/tmp/evil\n');
+    expect(result.stdout).toContain('::error::The env secret sets PATH, a reserved name');
+    expect(result.env).toBe('');
+  });
+
+  it('reports every reserved name, from both sources', () => {
+    const result = exportEnv('HOME=/root', 'GITHUB_TOKEN=x');
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('::error::The env input sets HOME');
+    expect(result.stdout).toContain('::error::The env secret sets GITHUB_TOKEN');
+  });
+
+  it.each([
+    { text: 'no separator here', error: 'Line 1 of the env secret is neither KEY=VALUE nor KEY<<DELIMITER' },
+    { text: 'OK=1\n1BAD=x', error: 'Line 2 of the env secret does not start with a variable name' },
+    { text: 'MY VAR=x', error: 'Line 1 of the env secret does not start with a variable name' },
+    { text: '=x', error: 'Line 1 of the env secret does not start with a variable name' },
+    { text: 'KEY<<', error: 'Line 1 of the env secret starts a multi-line value with no delimiter' },
+    { text: 'OK=1\nKEY<<EOF\nsecret line', error: 'The multi-line value that starts on line 2 of the env secret has no closing delimiter line' },
+  ])('fails on $text without echoing the line', ({ text, error }) => {
+    const result = exportEnv('', text);
+
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain(`::error::${error}`);
+    expect(result.stdout).not.toMatch(/::error::.*(no separator|secret line|1BAD|MY VAR)/);
+    expect(result.env).toBe('');
+  });
+
+  it('masks the lines of an unterminated multi-line secret value', () => {
+    const result = exportEnv('', 'KEY<<EOF\nsecret line');
+
+    expect(result.stdout).toContain('::add-mask::secret line\n');
   });
 });
