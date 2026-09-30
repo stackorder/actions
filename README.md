@@ -88,6 +88,8 @@ Those two files show the shape, but they do not run as written. Four additions a
 - **`sha`**. The server dispatches `stackorder-run.yml` with a `sha` input, the commit each job checks out, and `mode` is `plan`, `apply` or `drift`.
 - **`run-name`**. `stackorder-run.yml` must set `run-name: stackorder ${{ inputs.mode }} ${{ inputs.run_id }} wave ${{ inputs.wave }}`; the server recognises the workflow runs it dispatched by that title.
 
+`secrets: inherit` in those two files passes nothing from a repository outside the `stackorder` organization: GitHub passes inherited secrets only to a reusable workflow in the caller's own organization or enterprise. The complete files leave it out. To give Terraform or OpenTofu credentials besides AWS, pass the `env` secret explicitly (see [Provider credentials and environment variables](#provider-credentials-and-environment-variables)).
+
 Server-dispatched plans and drift checks run under the environment `default` and assume `aws-plan-role-arn` (falling back to `aws-role-arn`), so the complete `stackorder-run.yml` passes the plan role too.
 
 The complete files:
@@ -114,7 +116,6 @@ jobs:
       aws-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       tool: tofu
       # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
-    secrets: inherit
 ```
 
 ```yaml
@@ -146,7 +147,6 @@ jobs:
       aws-plan-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       aws-role-arn-map: '{"stacks/prod/": "arn:aws:iam::123456789012:role/stackorder-apply-prod", "stacks/staging/": "arn:aws:iam::123456789012:role/stackorder-apply-staging"}'
       # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
-    secrets: inherit
 ```
 
 Branch protection on the default branch should require the `stackorder/plan` and `stackorder/apply` checks.
@@ -171,7 +171,7 @@ The caller grants the union: for `stackorder-plan.yml` that is `id-token: write`
 Called from `stackorder-plan.yml` on `pull_request`. Three jobs:
 
 - **`resolve`** checks out the pull request head, not the `refs/pull/N/merge` commit, with full history, installs `stackorder`, runs the [`resolve`](#resolve) action and exposes `matrix`, `count`, `run-id`, `unconfirmed` and the installed `stackorder-version`, which every plan job installs in turn, so `latest` is resolved once per run. It runs only when the head repository is not a fork.
-- **`plan`** runs once per affected stack from the resolve matrix, with `fail-fast: false` and `max-parallel`, and only when `count` is above zero. Each job checks out the entry's `sha`, the commit the resolve step scanned (the event's commit when the entry has none), installs Terraform (`hashicorp/setup-terraform@v3`) or OpenTofu (`opentofu/setup-opentofu@v1`) with the wrapper disabled, installs `stackorder`, selects the AWS role, assumes it with `aws-actions/configure-aws-credentials@v4`, restores the provider plugin cache keyed on the stack's `.terraform.lock.hcl`, and runs the [`plan`](#plan) action. Plan jobs never declare an `environment`, so planning is never held behind an environment's reviewers.
+- **`plan`** runs once per affected stack from the resolve matrix, with `fail-fast: false` and `max-parallel`, and only when `count` is above zero. Each job checks out the entry's `sha`, the commit the resolve step scanned (the event's commit when the entry has none), installs Terraform (`hashicorp/setup-terraform@v3`) or OpenTofu (`opentofu/setup-opentofu@v1`) with the wrapper disabled, installs `stackorder`, exports [`env`](#provider-credentials-and-environment-variables), selects the AWS role, assumes it with `aws-actions/configure-aws-credentials@v4`, restores the provider plugin cache keyed on the stack's `.terraform.lock.hcl`, and runs the [`plan`](#plan) action. Plan jobs never declare an `environment`, so planning is never held behind an environment's reviewers.
 - **`fork-notice`** runs instead when the head repository is a fork and explains in the job summary why nothing was planned (see [Fork pull requests](#fork-pull-requests)).
 
 | Input | Type | Default | Description |
@@ -189,6 +189,11 @@ Called from `stackorder-plan.yml` on `pull_request`. Three jobs:
 | `working-directory` | string | `.` | Directory `stackorder` runs in, relative to the repository root |
 | `base-ref` | string | `''` | Git ref to diff against; empty uses the pull request base |
 | `stacks` | string | `''` | Comma separated stack keys to restrict the plan to; empty plans every affected stack |
+| `env` | string | `''` | Environment variables for each plan job, as `KEY=VALUE` lines or `KEY<<DELIMITER` multi-line values (see [Provider credentials and environment variables](#provider-credentials-and-environment-variables)) |
+
+| Secret | Required | Description |
+| --- | --- | --- |
+| `env` | no | Environment variables with secret values for each plan job, in the syntax of the `env` input; every value is masked in the log |
 
 ### run.yml
 
@@ -196,7 +201,7 @@ Called from `stackorder-run.yml`, which the server dispatches once per wave and 
 
 - `environment: ${{ matrix.environment }}` puts each stack under the GitHub environment the server assigned it (`default` when no prefix matches, never empty), so the environment's required reviewers, deployment protection rules and the AWS trust policy's `environment` condition gate the job.
 - `concurrency: stackorder-stack-<stack key>` without `cancel-in-progress` keeps two jobs from running on the same stack at once. The `stack-` prefix keeps the group apart from the caller's `stackorder-plan-<pull request>` group, since concurrency groups are shared by every workflow and job in the repository. GitHub keeps at most one pending job per concurrency group, so a third job queued for the same stack replaces the pending one.
-- The job checks out `sha`, installs the stack's tool (the entry's `tool` and `tool_version` when set, otherwise the `tool` and `tool-version` inputs), installs `stackorder`, selects and assumes the AWS role, restores the plugin cache, then runs exactly one of the [`plan`](#plan), [`apply`](#apply) or [`drift`](#drift) actions according to `mode`. Any other `mode` fails the job before checkout.
+- The job checks out `sha`, installs the stack's tool (the entry's `tool` and `tool_version` when set, otherwise the `tool` and `tool-version` inputs), installs `stackorder`, exports [`env`](#provider-credentials-and-environment-variables), selects and assumes the AWS role, restores the plugin cache, then runs exactly one of the [`plan`](#plan), [`apply`](#apply) or [`drift`](#drift) actions according to `mode`. Any other `mode` fails the job before checkout.
 
 | Input | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -217,6 +222,11 @@ Called from `stackorder-run.yml`, which the server dispatches once per wave and 
 | `runner` | string | `ubuntu-latest` | Runner label, or a JSON array or object passed to `runs-on` |
 | `max-parallel` | number | `6` | Maximum number of stacks run at the same time |
 | `working-directory` | string | `.` | Directory `stackorder` runs in, relative to the repository root |
+| `env` | string | `''` | Environment variables for each job, as `KEY=VALUE` lines or `KEY<<DELIMITER` multi-line values (see [Provider credentials and environment variables](#provider-credentials-and-environment-variables)) |
+
+| Secret | Required | Description |
+| --- | --- | --- |
+| `env` | no | Environment variables with secret values for each job, in the syntax of the `env` input; every value is masked in the log. An environment secret named `ENV` on the job's GitHub environment takes its place |
 
 A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
 
@@ -246,6 +256,7 @@ A `stacks` entry looks like this (the shape of `v1.MatrixEntry`):
 
   With no match the step uses `aws-role-arn`. When neither yields a role the job logs a notice and skips `configure-aws-credentials`, which suits self-hosted runners with an instance role. Reading `aws-role-arn-map` needs `jq` on the runner; GitHub-hosted runners have it, self-hosted runners may need it installed. For `mode: plan` and `mode: drift` in `run.yml` the map is ignored: those dispatches run under the `default` environment and assume `aws-plan-role-arn`, falling back to `aws-role-arn`. Pull request plans in `plan.yml` use the map passed to `plan.yml`, which must hold only read-only plan roles (see [AWS roles for stack instances](#aws-roles-for-stack-instances)).
 - **Role session name.** `aws-role-session-name` is passed to `configure-aws-credentials` as `role-session-name`, so CloudTrail shows which workflow assumed the role. It is either a name or a JSON object with `plan`, `apply` and `drift` keys, such as `{"plan": "stackorder-plan", "apply": "stackorder-apply"}`; `drift` falls back to `plan`, and `plan.yml` always uses `plan`. Characters outside `[\w+=,.@-]` become `-` and the name is cut to 64 characters; a name of one character fails the job, since AWS needs 2 to 64. An empty name, or a JSON object with no value for the mode, keeps the action's default, `GitHubActions`.
+- **Environment variables.** The `Export env` step appends the `env` input, then the `env` secret, to `$GITHUB_ENV`, so every later step of the job sees them: the AWS credentials step, the `stackorder` action, Terraform or OpenTofu and the hooks. The `resolve` job never gets them. See [Provider credentials and environment variables](#provider-credentials-and-environment-variables).
 - **Tool selection.** The job sets `STACKORDER_TOOL` to the tool it installed, so the CLI always calls the binary that is on `PATH`.
 - **Plugin cache.** `TF_PLUGIN_CACHE_DIR` points at `$RUNNER_TEMP/terraform-plugin-cache`, cached with `actions/cache@v4` under a key built from the runner OS and architecture, the tool and the hash of the stack's `.terraform.lock.hcl`, found under `working-directory`.
 - **Hooks.** `.stackorder/hooks/pre-plan.sh`, `post-plan.sh`, `pre-apply.sh` and `post-apply.sh` are run by the CLI itself, with `STACKORDER_STACK`, `STACKORDER_STACK_PATH`, `STACKORDER_INSTANCE`, `STACKORDER_RUN_ID`, `STACKORDER_PLAN_JSON` and `STACKORDER_PLAN_FILE` set, plus the stack's configured `env` for the mode, so they behave the same in CI and on a laptop and need no workflow step.
@@ -281,6 +292,120 @@ A stack directory with several instances, such as `infra/kyc:production` and `in
 ```
 
 Each bootstrap role needs `sts:AssumeRole` on the instance roles, and each instance role must trust it. A session reached by role chaining lasts at most one hour, whatever the role's maximum session duration, so a longer plan or apply fails when its credentials expire.
+
+### Provider credentials and environment variables
+
+AWS credentials come from the OIDC role. Every other credential a provider needs, and any other environment variable, reaches the jobs through two values that both workflows take:
+
+- the **`env` input**, for values that are not secret: they are in the workflow file and may show in the log;
+- the **`env` secret**, for secret values: the job registers every line of every value with `::add-mask::` before it exports anything, so the runner replaces them with `***` in the log.
+
+Both use the syntax of `$GITHUB_ENV`: one `KEY=VALUE` per line, or a multi-line value such as a PEM key between `KEY<<DELIMITER` and a line holding only `DELIMITER`.
+
+```text
+CLOUDFLARE_API_TOKEN=0123456789abcdef
+TLS_CLIENT_KEY<<EOF
+-----BEGIN PRIVATE KEY-----
+...
+-----END PRIVATE KEY-----
+EOF
+```
+
+The `Export env` step runs in the `plan` job of `plan.yml` and the `run` job of `run.yml`, after `stackorder` is installed and before the AWS credentials step, and appends the input and then the secret to `$GITHUB_ENV`: for a name in both, the secret's value wins. The rules:
+
+- **Names.** A name matches `[A-Za-z_][A-Za-z0-9_]*`. Names starting with `GITHUB_`, `RUNNER_`, `ACTIONS_` or `STACKORDER_`, and `PATH`, `HOME`, `NODE_OPTIONS`, `BASH_ENV` and `LD_PRELOAD`, are refused in any letter case, since they would redirect the runner, the later steps or the `stackorder` CLI. These include the names the CLI refuses in the [`env` key of `stackorder.yaml`](https://docs.stackorder.io/configuration/instances#env).
+- **Errors.** A reserved name fails the job with an error naming it. A line that is neither `KEY=VALUE` nor `KEY<<DELIMITER`, `<<` with no delimiter, or a multi-line value with no closing line fails the job with the line's number, never its text. Every reserved name in both values is reported, reading a value stops at its first malformed line, and nothing is exported when there is any error.
+- **Blank lines** outside a multi-line value are skipped, and a trailing carriage return is dropped from every line.
+- **Later steps.** `configure-aws-credentials` sets the `AWS_` credential and region variables after this step, so they replace any of the same name from `env`. `TF_PLUGIN_CACHE_DIR` is set after it too.
+
+#### Passing the `env` secret
+
+`secrets: inherit` gives a reusable workflow the caller's secrets only when both are in the same organization or enterprise. For a repository outside the `stackorder` organization it passes nothing, without an error, so pass the secret by name:
+
+```yaml
+    secrets:
+      env: ${{ secrets.STACKORDER_ENV }}
+```
+
+Where `secrets: inherit` does apply, such as a copy of these workflows in your own organization, the declared `env` secret reads the caller's secret named `ENV`: secret names are case insensitive.
+
+The `run` job of `run.yml` declares `environment: ${{ matrix.environment }}`, and GitHub gives a called job that declares an environment that environment's secret in place of the secret of the same name from the caller. An environment secret named `ENV` therefore replaces the whole `env` secret, without merging, in the jobs under that environment: applies under `production` read the `ENV` secret of `production`, and server-dispatched plans and drift checks, which run under `default`, read the one of `default`. Plan jobs of `plan.yml` declare no environment and get only what the caller passes.
+
+#### Which credentials a plan may hold
+
+A pull request plan runs the pull request's code, and so does a plan the server dispatches for a pull request: that code can read every variable of the job and send it anywhere. Treat `env` like the AWS roles:
+
+- give pull request plans, and the `default` environment, only read-only tokens;
+- keep tokens that can change infrastructure in `ENV` environment secrets of the environments whose protection rules gate applies, never in a repository or organization secret, which a pull request can pass to its own plan by editing the calling workflow.
+
+#### Example: a Cloudflare API token
+
+The Cloudflare provider reads `CLOUDFLARE_API_TOKEN`. Create a read-only API token and store it as the repository secret `STACKORDER_ENV` with the value `CLOUDFLARE_API_TOKEN=<read-only token>`, then create a token that can edit the same resources and store `CLOUDFLARE_API_TOKEN=<edit token>` as the environment secret `ENV` of `production`. Both wrappers pass the repository secret, and the account id, which is not secret, as an input:
+
+```yaml
+# stackorder-plan.yml
+jobs:
+  plan:
+    uses: stackorder/actions/.github/workflows/plan.yml@v1
+    permissions:
+      id-token: write
+      contents: read
+      checks: write
+      pull-requests: read
+      actions: read
+    with:
+      server-url: https://stackorder.example.com
+      aws-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
+      env: |
+        CLOUDFLARE_ACCOUNT_ID=0123456789abcdef0123456789abcdef
+    secrets:
+      env: ${{ secrets.STACKORDER_ENV }}
+```
+
+```yaml
+# stackorder-run.yml
+jobs:
+  run:
+    uses: stackorder/actions/.github/workflows/run.yml@v1
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
+      checks: write
+    with:
+      server-url: https://stackorder.example.com
+      run-id: ${{ inputs.run_id }}
+      mode: ${{ inputs.mode }}
+      wave: ${{ inputs.wave }}
+      sha: ${{ inputs.sha }}
+      stacks: ${{ inputs.stacks }}
+      aws-plan-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
+      aws-role-arn-map: '{"stacks/prod/": "arn:aws:iam::123456789012:role/stackorder-apply-prod"}'
+      env: |
+        CLOUDFLARE_ACCOUNT_ID=0123456789abcdef0123456789abcdef
+    secrets:
+      env: ${{ secrets.STACKORDER_ENV }}
+```
+
+Pull request plans and dispatched plans get the read-only token; applies under `production` get the edit token from the environment secret, and only once the environment's protection rules have passed. A provider environment variable is never written to the plan file.
+
+#### Example: an ephemeral Terraform variable
+
+A provider argument can take the token from a variable instead. Terraform and OpenTofu read a variable `x` from `TF_VAR_x`, so the secret holds `TF_VAR_cloudflare_api_token=<token>`. Declare the variable `ephemeral` (Terraform 1.10 or later, OpenTofu 1.11 or later):
+
+```hcl
+variable "cloudflare_api_token" {
+  type      = string
+  sensitive = true
+  ephemeral = true
+}
+
+provider "cloudflare" {
+  api_token = var.cloudflare_api_token
+}
+```
+
+A saved plan stores the value of every variable that is not ephemeral. The `plan` action uploads the plan file as a workflow artifact, which anyone who can read the repository can download, and `stackorder apply` applies the saved plan with the value it holds, so without `ephemeral` the plan-time token would be both published and used for the apply. An ephemeral variable is left out of the plan and read again at apply time, from the apply job's `env`.
 
 ## Actions
 
