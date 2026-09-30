@@ -2,6 +2,18 @@
 
 All notable changes to this repository are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/). Each `vX.Y.Z` release also moves the `vX` tag.
 
+## [Unreleased]
+
+### Added
+
+- `branding` in the `resolve`, `plan`, `apply` and `drift` actions: the `layers` icon on `orange`, like `setup`.
+- README header with the Stackorder logo, which follows the reader's light or dark theme, and links to stackorder.io, docs.stackorder.io and `stackorder/stackorder`. The logo files and the repository's social preview image are in `.github/assets/`.
+
+### Changed
+
+- The `setup` action's branding colour is `orange` instead of `purple`, the closest colour GitHub allows to the brand's accent.
+- The README links to the design document and the Stack instances page on docs.stackorder.io, instead of a private design artifact and the page's Markdown source. The Stack instances link now goes to its `env` and bootstrap-role sections.
+
 ## [1.0.0] - 2026-09-29
 
 The first release. It requires [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later, for the server and for the `stackorder` CLI that `setup` installs.
