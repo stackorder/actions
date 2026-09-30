@@ -100,7 +100,7 @@ function runStep(workflow: Workflow, job: string, name: string, context: Context
       encoding: 'utf8',
     });
     if (result.status !== 0) {
-      throw new Error(`step ${name} exited ${String(result.status)}: ${result.stderr}`);
+      throw new Error(`step ${name} exited ${String(result.status)}: ${result.stdout}${result.stderr}`);
     }
     const lines = readFileSync(output, 'utf8').split('\n').filter((line) => line !== '');
     const outputs = Object.fromEntries(
@@ -263,5 +263,18 @@ describe('Select AWS role session name', () => {
 
   it('is empty when the input is empty, so configure-aws-credentials keeps its default', () => {
     expect(sessionName(run, 'run', 'apply', '')).toBe('');
+  });
+
+  it.each([
+    { workflow: run, job: 'run', mode: 'apply', name: 'x' },
+    { workflow: run, job: 'run', mode: 'apply', name: '/' },
+    { workflow: run, job: 'run', mode: 'drift', name: JSON.stringify({ plan: 'x' }) },
+    { workflow: plan, job: 'plan', mode: 'plan', name: 'x' },
+  ])('fails on a one-character name for $job $mode from $name', ({ workflow, job, mode, name }) => {
+    expect(() => sessionName(workflow, job, mode, name)).toThrow(/aws-role-session-name must be 2 to 64 characters/);
+  });
+
+  it('accepts a two-character name', () => {
+    expect(sessionName(run, 'run', 'apply', 'xy')).toBe('xy');
   });
 });

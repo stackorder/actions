@@ -162,7 +162,12 @@ jobs:
             name=$(jq -r --arg mode "$MODE" '.[$mode] // (if $mode == "drift" then .plan else null end) // empty' <<<"$SESSION_NAME")
           fi
           name=$(printf '%s' "$name" | LC_ALL=C tr -c 'A-Za-z0-9_+=,.@-' '-')
-          echo "name=${name:0:64}" >> "$GITHUB_OUTPUT"
+          name="${name:0:64}"
+          if [ "${#name}" -eq 1 ]; then
+            echo "::error::aws-role-session-name must be 2 to 64 characters, got '$name'"
+            exit 1
+          fi
+          echo "name=$name" >> "$GITHUB_OUTPUT"
       - if: steps.role.outputs.arn != ''
         uses: aws-actions/configure-aws-credentials@v4
         with:
