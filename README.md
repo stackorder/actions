@@ -35,7 +35,7 @@ All runner-side logic lives in the `stackorder` CLI. This repository installs it
 
 ## Using the reusable workflows
 
-A repository needs a `stackorder.yaml` and two workflow files. The [design document](https://claude.ai/artifact/W3gQnvGu5Fw9DSXApYE766) gives the two files as:
+A repository needs a `stackorder.yaml` and two workflow files. The [design document](https://docs.stackorder.io/design/#repository-conventions) gives the two files as:
 
 **`.github/workflows/stackorder-plan.yml`**
 
@@ -263,7 +263,7 @@ A stack directory with several instances, such as `infra/kyc:production` and `in
 
 `aws-role-arn-map` applies only to the workflow it is passed to. Never pass the apply map to `plan.yml`: pull request plans run the pull request's code with no GitHub environment, so give `plan.yml` a read-only plan role in `aws-role-arn`, or its own `aws-role-arn-map` of plan-only roles that trust the repository's `pull_request` tokens. Server-dispatched plans and drift checks in `run.yml` assume the single `aws-plan-role-arn`, so that role must be able to read every instance's state.
 
-**One bootstrap role, provider `assume_role` per instance.** The workflows assume one OIDC role per mode: `aws-role-arn` in `plan.yml` for pull request plans, and in `run.yml` `aws-plan-role-arn` for plan and drift dispatches and `aws-role-arn` for applies. The Terraform or OpenTofu provider then assumes the instance's own role in its `assume_role` block, read from a variable that the repository's `env` configuration in `stackorder.yaml` sets per instance, with a `plan` and an `apply` value (see the `env` and AWS roles sections of [Stack instances](https://github.com/stackorder/stackorder/blob/main/docs/configuration/instances.md) in the Stackorder documentation). Declare that variable `ephemeral` (Terraform 1.10 or later, OpenTofu 1.11 or later): the value of a non-ephemeral variable is frozen in the saved plan, so an apply would otherwise assume the plan-time role. The workflow side is only the two roles:
+**One bootstrap role, provider `assume_role` per instance.** The workflows assume one OIDC role per mode: `aws-role-arn` in `plan.yml` for pull request plans, and in `run.yml` `aws-plan-role-arn` for plan and drift dispatches and `aws-role-arn` for applies. The Terraform or OpenTofu provider then assumes the instance's own role in its `assume_role` block, read from a variable that the repository's `env` configuration in `stackorder.yaml` sets per instance, with a `plan` and an `apply` value (see [`env`](https://docs.stackorder.io/configuration/instances#env) and [One bootstrap role and a provider role per account](https://docs.stackorder.io/configuration/instances#bootstrap-roles) on the Stack instances page of the Stackorder documentation). Declare that variable `ephemeral` (Terraform 1.10 or later, OpenTofu 1.11 or later): the value of a non-ephemeral variable is frozen in the saved plan, so an apply would otherwise assume the plan-time role. The workflow side is only the two roles:
 
 ```yaml
 # stackorder-plan.yml
