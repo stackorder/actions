@@ -6,12 +6,12 @@ All notable changes to this repository are documented here. The format follows [
 
 ### Added
 
-- `env` input and optional `env` secret on `plan.yml` and `run.yml`: environment variables for Terraform or OpenTofu, the hooks and every later step of the plan and run jobs, as `KEY=VALUE` lines or `KEY<<DELIMITER` multi-line values, the syntax of `$GITHUB_ENV`. A step after `setup` and before the AWS credentials step masks every line of every value of the secret, exports the input and then the secret, and fails the job, exporting nothing, on a malformed line, reported by its number only, or on a reserved name: the `GITHUB_`, `RUNNER_`, `ACTIONS_` and `STACKORDER_` prefixes, `PATH`, `HOME`, `NODE_OPTIONS`, `BASH_ENV` and `LD_PRELOAD`, in any letter case. The `resolve` job never gets them.
+- `env` input and optional `env` secret on `plan.yml` and `run.yml`: environment variables for Terraform or OpenTofu, the hooks and every later step of the plan and run jobs, as `KEY=VALUE` lines or `KEY<<DELIMITER` multi-line values, the syntax of `$GITHUB_ENV`. A step after `setup` and before the AWS credentials step masks every line of every value of the secret, trimmed and as written, splitting at carriage returns too, exports the input and then the secret, and fails the job, exporting nothing, on a malformed line, reported by its number only, or on a reserved name: the `GITHUB_`, `RUNNER_`, `ACTIONS_`, `STACKORDER_` and `LD_` prefixes, `PATH`, `HOME`, `NODE_OPTIONS`, `BASH_ENV`, `BASHOPTS`, `SHELLOPTS` and `PS4`, in any letter case. The `resolve` job never gets them.
 - README section on provider credentials: passing the `env` secret by name, since `secrets: inherit` passes nothing to a reusable workflow in another organization; an `ENV` environment secret replacing it for jobs under that GitHub environment; read-only tokens for plans and write tokens only in gated environments; examples with a Cloudflare API token and with an ephemeral `TF_VAR_` variable.
 
 ### Changed
 
-- The complete caller files in the README no longer pass `secrets: inherit`, which gave the reusable workflows nothing from a repository outside the `stackorder` organization and which they never read.
+- The caller files in the README no longer pass `secrets: inherit`, which gave the reusable workflows nothing from a repository outside the `stackorder` organization and which they never read.
 
 ## [1.0.0] - 2026-09-30
 
