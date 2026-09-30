@@ -71,12 +71,16 @@ function evaluate(template: string | undefined, context: Context): string {
   return '';
 }
 
-function checkedOutCommit(workflow: Workflow, job: string, context: Context): string {
-  const step = workflow.jobs[job]?.steps.find((candidate) => candidate.uses?.startsWith('actions/checkout@'));
+function findUses(workflow: Workflow, job: string, action: string): Step {
+  const step = workflow.jobs[job]?.steps.find((candidate) => candidate.uses?.startsWith(`${action}@`));
   if (step === undefined) {
-    throw new Error(`job ${job} has no actions/checkout step`);
+    throw new Error(`job ${job} has no ${action} step`);
   }
-  return evaluate(step.with?.ref, context) || context.github.sha;
+  return step;
+}
+
+function checkedOutCommit(workflow: Workflow, job: string, context: Context): string {
+  return evaluate(findUses(workflow, job, 'actions/checkout').with?.ref, context) || context.github.sha;
 }
 
 function findStep(workflow: Workflow, job: string, name: string): Step {
@@ -276,5 +280,30 @@ describe('Select AWS role session name', () => {
 
   it('accepts a two-character name', () => {
     expect(sessionName(run, 'run', 'apply', 'xy')).toBe('xy');
+  });
+});
+
+describe('AWS credentials and plugin cache steps', () => {
+  const run = readWorkflow('run.yml');
+  const plan = readWorkflow('plan.yml');
+
+  it.each(['aws-actions/configure-aws-credentials', 'actions/cache'])('%s has the same inputs in run.yml and plan.yml', (action) => {
+    const inRun = findUses(run, 'run', action);
+    const inPlan = findUses(plan, 'plan', action);
+
+    expect(inPlan.uses).toBe(inRun.uses);
+    expect(inPlan.with).toEqual(inRun.with);
+  });
+
+  it.each([
+    { workflow: run, job: 'run' },
+    { workflow: plan, job: 'plan' },
+  ])('$job keys the cache on the lock file under working-directory and names the role session', ({ workflow, job }) => {
+    expect(findUses(workflow, job, 'actions/cache').with?.key).toContain(
+      "hashFiles(format('{0}/{1}/.terraform.lock.hcl', inputs.working-directory, matrix.stack))",
+    );
+    expect(findUses(workflow, job, 'aws-actions/configure-aws-credentials').with?.['role-session-name']).toBe(
+      '${{ steps.session.outputs.name }}',
+    );
   });
 });
