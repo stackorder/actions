@@ -15,6 +15,12 @@
   <a href="https://github.com/stackorder/stackorder">stackorder/stackorder</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/stackorder/actions/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/stackorder/actions"></a>
+  <a href="LICENSE"><img alt="Licence: Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-blue"></a>
+  <a href="https://github.com/stackorder/actions/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/stackorder/actions/actions/workflows/ci.yml/badge.svg"></a>
+</p>
+
 # Stackorder Actions
 
 GitHub Actions and reusable workflows for [Stackorder](https://github.com/stackorder/stackorder), the lightweight Terraform and OpenTofu orchestrator on GitHub Actions.
@@ -113,7 +119,7 @@ jobs:
       server-url: https://stackorder.example.com
       aws-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       tool: tofu
-      # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
+      # stackorder-version: 0.4.0   # optional: pin the CLI release; the default is latest
 ```
 
 ```yaml
@@ -144,7 +150,7 @@ jobs:
       stacks: ${{ inputs.stacks }}
       aws-plan-role-arn: arn:aws:iam::123456789012:role/stackorder-plan
       aws-role-arn-map: '{"stacks/prod/": "arn:aws:iam::123456789012:role/stackorder-apply-prod", "stacks/staging/": "arn:aws:iam::123456789012:role/stackorder-apply-staging"}'
-      # stackorder-version: 0.1.0   # optional: pin the CLI release; the default is latest
+      # stackorder-version: 0.4.0   # optional: pin the CLI release; the default is latest
 ```
 
 Branch protection on the default branch should require the `stackorder/plan` and `stackorder/apply` checks.
@@ -414,7 +420,7 @@ The composite actions contain no logic beyond passing inputs to the CLI, so any 
 ```yaml
 - uses: stackorder/actions/setup@v1
   with:
-    version: 0.1.0
+    version: 0.4.0
 ```
 
 Maps the runner to `linux`, `darwin` or `windows` and `amd64` or `arm64`, downloads `stackorder_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) from `https://github.com/stackorder/stackorder/releases/download/v<version>/`, checks it against the `sha256` line for that file in `stackorder_<version>_checksums.txt`, extracts it, caches it with `@actions/tool-cache` under the tool name `stackorder`, and adds it to `PATH`. A version already in the runner's tool cache is used without downloading. Any failure (unsupported runner, unknown version, missing asset, checksum mismatch, archive without the binary) fails the step with a message naming the version, platform and URL.
@@ -547,6 +553,15 @@ npm run check-dist  # build, then fail if setup/dist differs from the commit
 ```
 
 Rebuild and commit `setup/dist` with every change to `setup/src` or the dependencies. CI runs the checks above, `actionlint` over the workflows (including copies of the reusable workflows pointed at the local actions, so their inputs are checked against the metadata in this repository), a smoke test that `./setup` fails clearly for a release that does not exist, a run of the composite actions against a stub CLI in [`test/stackorder-stub.sh`](test/stackorder-stub.sh), and a check that `drift` passes on exit codes 0 and 2 and fails on 1 and 3.
+
+## Repositories
+
+| Repo | Contents |
+| --- | --- |
+| [`stackorder/stackorder`](https://github.com/stackorder/stackorder) | Go module for the server and the CLI, the embedded UI, migrations, the docs site, and the Terraform module that deploys the server |
+| `stackorder/actions` (this repo) | The `setup` JavaScript action, the `resolve`, `plan`, `apply` and `drift` composite actions, and the reusable `plan.yml` and `run.yml` workflows |
+| [`stackorder/terraform-provider-stackorder`](https://github.com/stackorder/terraform-provider-stackorder) | The `stackorder/stackorder` provider on the [Terraform Registry](https://registry.terraform.io/providers/stackorder/stackorder/latest) and the [OpenTofu Registry](https://search.opentofu.org/provider/stackorder/stackorder/latest), which reads [shared outputs](https://docs.stackorder.io/configuration/outputs) |
+| [`stackorder/example-infra`](https://github.com/stackorder/example-infra) | Demo monorepo used by the end-to-end tests |
 
 ## License
 
