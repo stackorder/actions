@@ -1,5 +1,6 @@
 name: Stackorder apply
 description: Download a stack's plan artifact from the run that planned it, then apply it with stackorder.
+author: Stackorder
 branding:
   icon: layers
   color: orange

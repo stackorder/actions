@@ -1,5 +1,6 @@
 name: Stackorder drift
 description: Check one stack for drift with stackorder. Drift found is a result in the outputs, not a failed step.
+author: Stackorder
 branding:
   icon: layers
   color: orange

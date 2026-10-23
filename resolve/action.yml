@@ -1,5 +1,6 @@
 name: Stackorder resolve
 description: Scan the repository, post its dependency graph to the Stackorder server and expose the plan matrix.
+author: Stackorder
 branding:
   icon: layers
   color: orange

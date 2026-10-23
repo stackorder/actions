@@ -1,5 +1,6 @@
 name: Stackorder plan
 description: Plan one stack with stackorder and upload the binary plan file as a workflow artifact.
+author: Stackorder
 branding:
   icon: layers
   color: orange
