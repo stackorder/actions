@@ -2,6 +2,16 @@
 
 All notable changes to this repository are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and releases follow [Semantic Versioning](https://semver.org/). Each `vX.Y.Z` release also moves the `vX` tag.
 
+## [Unreleased]
+
+### Fixed
+
+- `run.yml` resolves `stackorder-version` once per dispatch. A new `version` job resolves the release through the `setup` action's new `resolve-only` mode and exposes it as `stackorder-version`, which every stack job installs, so one dispatch installs a single `stackorder` release even when `stackorder-version` is `latest` and a release is published while the dispatch is in flight. Before, each matrix job resolved `latest` on its own and could install a different version. `plan.yml` already resolved once in its `resolve` job.
+
+### Added
+
+- `resolve-only` input on the `setup` action: resolves `version` and sets the `version` output without downloading, caching or adding the CLI to `PATH`, leaving the `path` output empty. `true` or `false`, defaulting to `false`; any other value fails the step. Lets a caller resolve `latest` once in one job and pass the exact version to jobs that install the CLI.
+
 ## [1.1.0] - 2026-09-30
 
 It works with [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later.
@@ -35,6 +45,6 @@ The first release. It requires [stackorder/stackorder](https://github.com/stacko
 - README header with the Stackorder logo, which follows the reader's light or dark theme, and links to stackorder.io, docs.stackorder.io and `stackorder/stackorder`; the README links to the design document and the Stack instances page on docs.stackorder.io. The logo files and the repository's social preview image are in `.github/assets/`.
 - CI with lint, type checks, tests, a `setup/dist` freshness check, actionlint, a `setup` failure smoke test, a composite action test against a stub CLI and a `drift` exit code check; a release workflow that publishes release notes and moves the major tag when the release is the newest of its major.
 
-[Unreleased]: https://github.com/stackorder/actions/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/stackorder/actions/compare/v1.1.0...HEAD
 [1.1.0]: https://github.com/stackorder/actions/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/stackorder/actions/releases/tag/v1.0.0

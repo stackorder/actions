@@ -164,6 +164,7 @@ Every job declares the minimum it needs, and the workflow-level default is `perm
 | `plan.yml` | `resolve` | write | read | write | read | | OIDC to the server; checkout; fallback check when the server is unreachable; pull request base and head |
 | `plan.yml` | `plan` | write | read | write | | read | OIDC to AWS and the server; checkout; fallback check; reading workflow run and job metadata |
 | `plan.yml` | `fork-notice` | | | | | | Writes only the job summary |
+| `run.yml` | `version` | | read | | | | Resolves the `stackorder` release through the releases API with `github.token` |
 | `run.yml` | `run` | write | read | write | | read | OIDC to AWS and the server; checkout; fallback check; download of the plan artifact from the plan run |
 
 The caller grants the union: for `stackorder-plan.yml` that is `id-token: write`, `contents: read`, `checks: write`, `pull-requests: read` and `actions: read`; for `stackorder-run.yml` it is `id-token: write`, `contents: read`, `actions: read` and `checks: write`.
@@ -201,11 +202,12 @@ Called from `stackorder-plan.yml` on `pull_request`. Three jobs:
 
 ### run.yml
 
-Called from `stackorder-run.yml`, which the server dispatches once per wave and GitHub environment. One job, `run`, fans out over the `stacks` input with `fail-fast: false` and `max-parallel`:
+Called from `stackorder-run.yml`, which the server dispatches once per wave and GitHub environment. A `version` job resolves the `stackorder` release once, then the `run` job fans out over the `stacks` input with `fail-fast: false` and `max-parallel`:
 
+- **`version`** runs [`setup`](#setup) with `resolve-only`, which resolves `stackorder-version` through the releases API without downloading the CLI, and exposes the exact version as `stackorder-version`. Every `run` job installs that version, so one dispatch installs a single `stackorder` release even when `stackorder-version` is `latest` and a release is published while the dispatch is in flight. Across separate dispatches of the same change (one per wave and environment) `latest` can still resolve differently; pass a pinned `stackorder-version` to pin the CLI across every wave.
 - `environment: ${{ matrix.environment }}` puts each stack under the GitHub environment the server assigned it (`default` when no prefix matches, never empty), so the environment's required reviewers, deployment protection rules and the AWS trust policy's `environment` condition gate the job.
 - `concurrency: stackorder-stack-<stack key>` without `cancel-in-progress` keeps two jobs from running on the same stack at once. The `stack-` prefix keeps the group apart from the caller's `stackorder-plan-<pull request>` group, since concurrency groups are shared by every workflow and job in the repository. GitHub keeps at most one pending job per concurrency group, so a third job queued for the same stack replaces the pending one.
-- The job checks out `sha`, installs the stack's tool (the entry's `tool` and `tool_version` when set, otherwise the `tool` and `tool-version` inputs), installs `stackorder`, exports [`env`](#provider-credentials-and-environment-variables), selects and assumes the AWS role, restores the plugin cache, then runs exactly one of the [`plan`](#plan), [`apply`](#apply) or [`drift`](#drift) actions according to `mode`. Any other `mode` fails the job before checkout.
+- The job checks out `sha`, installs the stack's tool (the entry's `tool` and `tool_version` when set, otherwise the `tool` and `tool-version` inputs), installs the `stackorder-version` the `version` job resolved, exports [`env`](#provider-credentials-and-environment-variables), selects and assumes the AWS role, restores the plugin cache, then runs exactly one of the [`plan`](#plan), [`apply`](#apply) or [`drift`](#drift) actions according to `mode`. Any other `mode` fails the job before checkout.
 
 | Input | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -430,11 +432,12 @@ Maps the runner to `linux`, `darwin` or `windows` and `amd64` or `arm64`, downlo
 | `version` | `latest` | Release to install, as `1.2.3` or `v1.2.3`; `latest` resolves the newest release through `GET https://api.github.com/repos/stackorder/stackorder/releases/latest` |
 | `token` | `${{ github.token }}` on github.com, empty elsewhere | github.com token sent to the GitHub API when resolving `latest`. A GitHub Enterprise Server token is never sent to github.com; there, `latest` is resolved anonymously unless you pass a github.com token, or pin `version` |
 | `checksum` | `true` | Verify the archive against the release checksums file: `true` or `false`, and any other value fails the step |
+| `resolve-only` | `false` | Resolve `version` and set the `version` output without downloading, caching or adding the CLI to `PATH`: `true` or `false`, and any other value fails the step. Use it to resolve `latest` once in one job and pass the result to jobs that install the CLI, as `run.yml` does |
 
 | Output | Description |
 | --- | --- |
-| `version` | Installed version, without the leading `v` |
-| `path` | Absolute path to the installed `stackorder` binary |
+| `version` | Resolved version, without the leading `v`; set whether or not the CLI is installed |
+| `path` | Absolute path to the installed `stackorder` binary; empty when `resolve-only` is `true` |
 
 ### resolve
 
@@ -527,7 +530,7 @@ A `pull_request` run from a fork gets a read-only `GITHUB_TOKEN` and no `id-toke
 | `@v1.2.3` | No | A fixed release of the workflow or action file you reference |
 | `@<commit sha>` | No | Immutable pinning, for example with Dependabot or Renovate updates |
 
-The reusable workflows call this repository's actions at `@v1` and install the `stackorder` CLI given by `stackorder-version` (`latest` by default). Pinning `plan.yml@v1.2.3` pins the workflow file, not the actions it calls; set `stackorder-version` to pin the CLI. If AWS trust policies or `STACKORDER_REQUIRED_WORKFLOW_REF` pin `job_workflow_ref` to `stackorder/actions/.github/workflows/*.yml@refs/tags/v1*`, call the workflows by a `v1` tag, not by a branch or commit.
+The reusable workflows call this repository's actions at `@v1` and install the `stackorder` CLI given by `stackorder-version` (`latest` by default). Each workflow run resolves `latest` once and installs that one release in every job; `plan.yml` resolves it in its `resolve` job and `run.yml` in a `version` job. A caller that fans a single change over several `run.yml` dispatches (one per wave and environment) and needs the same CLI across all of them should pass a pinned `stackorder-version`, since separate dispatches resolve `latest` independently. Pinning `plan.yml@v1.2.3` pins the workflow file, not the actions it calls; set `stackorder-version` to pin the CLI. If AWS trust policies or `STACKORDER_REQUIRED_WORKFLOW_REF` pin `job_workflow_ref` to `stackorder/actions/.github/workflows/*.yml@refs/tags/v1*`, call the workflows by a `v1` tag, not by a branch or commit.
 
 ### How the v1 tag is maintained
 
