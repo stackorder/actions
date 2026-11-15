@@ -4,6 +4,10 @@ All notable changes to this repository are documented here. The format follows [
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-15
+
+It works with [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later.
+
 ### Fixed
 
 - `run.yml` resolves `stackorder-version` once per dispatch. A new `version` job resolves the release through the `setup` action's new `resolve-only` mode and exposes it as `stackorder-version`, which every stack job installs, so one dispatch installs a single `stackorder` release even when `stackorder-version` is `latest` and a release is published while the dispatch is in flight. Before, each matrix job resolved `latest` on its own and could install a different version. `plan.yml` already resolved once in its `resolve` job.
@@ -45,6 +49,7 @@ The first release. It requires [stackorder/stackorder](https://github.com/stacko
 - README header with the Stackorder logo, which follows the reader's light or dark theme, and links to stackorder.io, docs.stackorder.io and `stackorder/stackorder`; the README links to the design document and the Stack instances page on docs.stackorder.io. The logo files and the repository's social preview image are in `.github/assets/`.
 - CI with lint, type checks, tests, a `setup/dist` freshness check, actionlint, a `setup` failure smoke test, a composite action test against a stub CLI and a `drift` exit code check; a release workflow that publishes release notes and moves the major tag when the release is the newest of its major.
 
-[Unreleased]: https://github.com/stackorder/actions/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/stackorder/actions/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/stackorder/actions/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/stackorder/actions/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/stackorder/actions/releases/tag/v1.0.0
