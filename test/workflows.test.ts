@@ -177,6 +177,33 @@ describe('plan.yml', () => {
   });
 });
 
+describe('resolve the stackorder version once per run', () => {
+  const run = readWorkflow('run.yml');
+  const plan = readWorkflow('plan.yml');
+  const jobOutput = (workflow: Workflow, job: string, name: string): string | undefined =>
+    (workflow.jobs as Record<string, { outputs?: Record<string, string> }>)[job]?.outputs?.[name];
+
+  it('run.yml resolves once in a version job and every stack installs that version', () => {
+    const resolve = findUses(run, 'version', 'stackorder/actions/setup');
+    expect(resolve.with?.['resolve-only']).toBe('true');
+    expect(resolve.with?.version).toBe('${{ inputs.stackorder-version }}');
+    expect(jobOutput(run, 'version', 'stackorder-version')).toBe('${{ steps.setup.outputs.version }}');
+
+    const runJob = run.jobs.run as { needs?: string | string[] };
+    expect([runJob.needs].flat()).toContain('version');
+    expect(findUses(run, 'run', 'stackorder/actions/setup').with?.version).toBe(
+      '${{ needs.version.outputs.stackorder-version }}',
+    );
+  });
+
+  it('plan.yml resolves once in the resolve job and every stack installs that version', () => {
+    expect(jobOutput(plan, 'resolve', 'stackorder-version')).toBe('${{ steps.setup.outputs.version }}');
+    expect(findUses(plan, 'plan', 'stackorder/actions/setup').with?.version).toBe(
+      '${{ needs.resolve.outputs.stackorder-version }}',
+    );
+  });
+});
+
 describe('Select AWS role', () => {
   const run = readWorkflow('run.yml');
   const plan = readWorkflow('plan.yml');

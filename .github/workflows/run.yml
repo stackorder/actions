@@ -87,8 +87,22 @@ defaults:
     shell: bash
 
 jobs:
+  version:
+    runs-on: ${{ (startsWith(inputs.runner, '[') || startsWith(inputs.runner, '{')) && fromJSON(inputs.runner) || inputs.runner }}
+    permissions:
+      contents: read
+    outputs:
+      stackorder-version: ${{ steps.setup.outputs.version }}
+    steps:
+      - id: setup
+        uses: stackorder/actions/setup@v1
+        with:
+          version: ${{ inputs.stackorder-version }}
+          resolve-only: "true"
+
   run:
     name: ${{ inputs.wave != '' && format('{0} wave {1} {2}', inputs.mode, inputs.wave, matrix.key) || format('{0} {1}', inputs.mode, matrix.key) }}
+    needs: version
     runs-on: ${{ (startsWith(inputs.runner, '[') || startsWith(inputs.runner, '{')) && fromJSON(inputs.runner) || inputs.runner }}
     environment: ${{ matrix.environment }}
     concurrency:
@@ -130,7 +144,7 @@ jobs:
           tofu_wrapper: false
       - uses: stackorder/actions/setup@v1
         with:
-          version: ${{ inputs.stackorder-version }}
+          version: ${{ needs.version.outputs.stackorder-version }}
       - name: Export env
         env:
           ENV_INPUT: ${{ inputs.env }}
