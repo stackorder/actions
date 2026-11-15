@@ -18,12 +18,16 @@ inputs:
     description: Verify the archive against the release's stackorder_<version>_checksums.txt; true or false, and any other value fails the step.
     required: false
     default: "true"
+  resolve-only:
+    description: Resolve the version and set the version output without downloading, caching or adding the CLI to PATH; true or false, and any other value fails the step. The path output stays empty.
+    required: false
+    default: "false"
 
 outputs:
   version:
-    description: Installed version, without the leading v.
+    description: Resolved version, without the leading v; set whether or not the CLI is installed.
   path:
-    description: Absolute path to the installed stackorder binary.
+    description: Absolute path to the installed stackorder binary; empty when resolve-only is true.
 
 runs:
   using: node24

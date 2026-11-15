@@ -5,7 +5,7 @@ import { basename, dirname, join } from 'node:path';
 import * as core from '@actions/core';
 import * as tc from '@actions/tool-cache';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { checksumEnabled, run } from '../src/main';
+import { checksumEnabled, resolveOnly, run } from '../src/main';
 import { LATEST_RELEASE_URL } from '../src/version';
 
 const http = vi.hoisted(() => ({ get: vi.fn(), dispose: vi.fn() }));
@@ -275,6 +275,64 @@ describe('run', () => {
     await run('linux', 'x64');
 
     expect(core.setFailed).toHaveBeenCalledWith('Invalid stackorder version "main": expected latest, 1.2.3 or v1.2.3');
+  });
+
+  it('resolve-only exposes a pinned version without downloading or touching PATH', async () => {
+    inputs.set('version', 'v1.2.3');
+    inputs.set('resolve-only', 'true');
+
+    await run('linux', 'x64');
+
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(http.get).not.toHaveBeenCalled();
+    expect(tc.downloadTool).not.toHaveBeenCalled();
+    expect(tc.find).not.toHaveBeenCalled();
+    expect(core.addPath).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith('version', '1.2.3');
+    expect(core.setOutput).not.toHaveBeenCalledWith('path', expect.anything());
+  });
+
+  it('resolve-only resolves latest through the releases API without downloading', async () => {
+    inputs.set('version', 'latest');
+    inputs.set('resolve-only', 'true');
+    http.get.mockResolvedValue({
+      message: { statusCode: 200 },
+      readBody: () => Promise.resolve(JSON.stringify({ tag_name: 'v2.0.1' })),
+    });
+
+    await run('linux', 'x64');
+
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(http.get).toHaveBeenCalledWith(LATEST_RELEASE_URL, expect.objectContaining({ authorization: 'Bearer ghs_token' }));
+    expect(tc.downloadTool).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith('version', '2.0.1');
+    expect(core.setOutput).not.toHaveBeenCalledWith('path', expect.anything());
+  });
+
+  it('resolve-only still fails on an invalid version input', async () => {
+    inputs.set('version', 'main');
+    inputs.set('resolve-only', 'true');
+
+    await run('linux', 'x64');
+
+    expect(core.setFailed).toHaveBeenCalledWith('Invalid stackorder version "main": expected latest, 1.2.3 or v1.2.3');
+    expect(core.setOutput).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveOnly', () => {
+  it.each([
+    ['', false],
+    ['false', false],
+    [' False ', false],
+    ['true', true],
+    ['TRUE', true],
+  ])('parses %j as %s', (input, expected) => {
+    expect(resolveOnly(input)).toBe(expected);
+  });
+
+  it('rejects anything else', () => {
+    expect(() => resolveOnly('yes')).toThrow('Invalid resolve-only input "yes": expected true or false');
   });
 });
 

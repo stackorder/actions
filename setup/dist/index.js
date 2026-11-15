@@ -23678,11 +23678,27 @@ function checksumEnabled(input) {
   }
   throw new Error(`Invalid checksum input "${input}": expected true or false`);
 }
+function resolveOnly(input) {
+  const value = input.trim().toLowerCase();
+  if (value === "" || value === "false") {
+    return false;
+  }
+  if (value === "true") {
+    return true;
+  }
+  throw new Error(`Invalid resolve-only input "${input}": expected true or false`);
+}
 async function run(platform2 = process.platform, arch3 = process.arch) {
   try {
+    const onlyResolve = resolveOnly(getInput("resolve-only"));
     const target = resolveTarget(platform2, arch3);
     const verify = checksumEnabled(getInput("checksum"));
     const version = await resolveVersion(getInput("version"), getInput("token"));
+    if (onlyResolve) {
+      setOutput("version", version);
+      info(`Resolved stackorder ${version}`);
+      return;
+    }
     const installation = await install(version, target, verify);
     addPath(installation.dir);
     setOutput("version", installation.version);
