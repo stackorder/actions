@@ -4,6 +4,10 @@ All notable changes to this repository are documented here. The format follows [
 
 ## [Unreleased]
 
+### Added
+
+- Root `action.yml` (`Set up Stackorder`) exposing the `setup` action at the repository root (`uses: stackorder/actions@v1`) for GitHub Marketplace publishing. It shares `setup/dist/index.js`, inputs and outputs with `setup/action.yml`, leaving `stackorder/actions/setup@v1`, the other subdirectory actions and the reusable workflows unchanged.
+
 ## [1.2.0] - 2026-11-15
 
 It works with [stackorder/stackorder](https://github.com/stackorder/stackorder) v0.1.0 or later.

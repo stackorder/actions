@@ -31,7 +31,7 @@ All runner-side logic lives in the `stackorder` CLI. This repository installs it
 
 | Path | Kind | What it does |
 | --- | --- | --- |
-| [`setup`](#setup) | JavaScript action (`node24`) | Downloads the `stackorder` release for the runner, verifies its SHA-256, caches it and adds it to `PATH` |
+| [`.`](#setup), [`setup`](#setup) | JavaScript action (`node24`) | Downloads the `stackorder` release for the runner, verifies its SHA-256, caches it and adds it to `PATH` |
 | [`resolve`](#resolve) | Composite action | `stackorder resolve`: scans the repository, posts the graph, exposes the plan matrix |
 | [`plan`](#plan) | Composite action | `stackorder plan` for one stack, then uploads the plan file as an artifact |
 | [`apply`](#apply) | Composite action | Downloads a stack's plan artifact from the plan run, then `stackorder apply` |
@@ -420,10 +420,12 @@ The composite actions contain no logic beyond passing inputs to the CLI, so any 
 ### setup
 
 ```yaml
-- uses: stackorder/actions/setup@v1
+- uses: stackorder/actions@v1
   with:
     version: 0.4.0
 ```
+
+`stackorder/actions@v1` (the root GitHub Marketplace entrypoint) and `stackorder/actions/setup@v1` run the same action with the same inputs and outputs.
 
 Maps the runner to `linux`, `darwin` or `windows` and `amd64` or `arm64`, downloads `stackorder_<version>_<os>_<arch>.tar.gz` (`.zip` on Windows) from `https://github.com/stackorder/stackorder/releases/download/v<version>/`, checks it against the `sha256` line for that file in `stackorder_<version>_checksums.txt`, extracts it, caches it with `@actions/tool-cache` under the tool name `stackorder`, and adds it to `PATH`. A version already in the runner's tool cache is used without downloading. Any failure (unsupported runner, unknown version, missing asset, checksum mismatch, archive without the binary) fails the step with a message naming the version, platform and URL.
 
@@ -555,7 +557,7 @@ npm run build       # bundle setup/dist/index.js
 npm run check-dist  # build, then fail if setup/dist differs from the commit
 ```
 
-Rebuild and commit `setup/dist` with every change to `setup/src` or the dependencies. CI runs the checks above, `actionlint` over the workflows (including copies of the reusable workflows pointed at the local actions, so their inputs are checked against the metadata in this repository), a smoke test that `./setup` fails clearly for a release that does not exist, a run of the composite actions against a stub CLI in [`test/stackorder-stub.sh`](test/stackorder-stub.sh), and a check that `drift` passes on exit codes 0 and 2 and fails on 1 and 3.
+Rebuild and commit `setup/dist` with every change to `setup/src` or the dependencies. CI runs the checks above, `actionlint` over the workflows (including copies of the reusable workflows pointed at the local actions, so their inputs are checked against the metadata in this repository), a smoke test that `./` and `./setup` fail clearly for a release that does not exist, a run of the composite actions against a stub CLI in [`test/stackorder-stub.sh`](test/stackorder-stub.sh), and a check that `drift` passes on exit codes 0 and 2 and fails on 1 and 3.
 
 ## Repositories
 
