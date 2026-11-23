@@ -57,10 +57,17 @@ jobs:
         continue-on-error: true
         with:
           version: 0.0.0-none
+      - id: missing-root
+        uses: ./
+        continue-on-error: true
+        with:
+          version: 0.0.0-none
       - name: Check the failure and its message
         env:
           OUTCOME: ${{ steps.missing.outcome }}
           INSTALLED: ${{ steps.missing.outputs.version }}
+          ROOT_OUTCOME: ${{ steps.missing-root.outcome }}
+          ROOT_INSTALLED: ${{ steps.missing-root.outputs.version }}
           INPUT_VERSION: 0.0.0-none
           INPUT_TOKEN: ${{ github.token }}
           INPUT_CHECKSUM: "true"
@@ -68,6 +75,10 @@ jobs:
         run: |
           if [ "$OUTCOME" != failure ] || [ -n "$INSTALLED" ]; then
             echo "::error::setup reported outcome '$OUTCOME' and version '$INSTALLED' for a release that does not exist"
+            exit 1
+          fi
+          if [ "$ROOT_OUTCOME" != failure ] || [ -n "$ROOT_INSTALLED" ]; then
+            echo "::error::root action reported outcome '$ROOT_OUTCOME' and version '$ROOT_INSTALLED' for a release that does not exist"
             exit 1
           fi
           code=0
