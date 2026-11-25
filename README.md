@@ -17,6 +17,7 @@
 
 <p align="center">
   <a href="https://github.com/stackorder/actions/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/stackorder/actions"></a>
+  <a href="https://github.com/marketplace/actions/set-up-stackorder"><img alt="GitHub Marketplace: Set up Stackorder" src="https://img.shields.io/badge/marketplace-set--up--stackorder-blue?logo=github"></a>
   <a href="LICENSE"><img alt="Licence: Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-blue"></a>
   <a href="https://github.com/stackorder/actions/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/stackorder/actions/actions/workflows/ci.yml/badge.svg"></a>
 </p>
